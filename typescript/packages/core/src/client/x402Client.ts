@@ -2,7 +2,12 @@ import { x402Version } from "..";
 import { SchemeNetworkClient } from "../types/mechanisms";
 import { PaymentPayload, PaymentRequirements } from "../types/payments";
 import { Network, PaymentRequired, SettleResponse } from "../types";
-import { deepEqual, findByNetworkAndScheme, findSchemesByNetwork } from "../utils";
+import {
+  deepEqual,
+  findByNetworkAndScheme,
+  findSchemesByNetwork,
+  toComparableArray,
+} from "../utils";
 
 /**
  * Client Hook Context Interfaces
@@ -488,7 +493,9 @@ export class x402Client {
    * Merges server-declared extensions with client extension echoes.
    * Client extension data may add fields, but server-declared scalar fields remain intact.
    * When both sides declare the same array field (e.g. builder-code `s`), values are
-   * concatenated with server entries first and duplicates removed.
+   * concatenated with client entries first (so a downstream length cap trims server
+   * entries rather than the client's) and duplicates removed; a scalar on either side
+   * is treated as a single-element array.
    *
    * @param serverExtensions - Extensions declared by the server in the 402 response
    * @param clientExtensions - Extensions provided by the client or scheme
@@ -540,9 +547,15 @@ export class x402Client {
             continue;
           }
 
-          if (Array.isArray(serverFieldValue) && Array.isArray(clientFieldValue)) {
-            item.target[fieldKey] = mergeArraysUnique(serverFieldValue, clientFieldValue);
-            continue;
+          // A scalar on one side (e.g. builder-code `s` sent as a bare string)
+          // merges as a single-element array against an array on the other side.
+          if (Array.isArray(serverFieldValue) || Array.isArray(clientFieldValue)) {
+            const serverArray = toComparableArray(serverFieldValue);
+            const clientArray = toComparableArray(clientFieldValue);
+            if (serverArray && clientArray) {
+              item.target[fieldKey] = mergeArraysUnique(clientArray, serverArray);
+              continue;
+            }
           }
 
           if (!Object.prototype.hasOwnProperty.call(item.target, fieldKey)) {
@@ -790,16 +803,17 @@ export class x402Client {
 }
 
 /**
- * Concatenates two arrays, keeping server entries first and dropping client
+ * Concatenates two arrays, keeping client entries first (so a downstream length
+ * cap trims server entries rather than the client's) and dropping server
  * duplicates already present (deep equality).
  *
- * @param server - Server-declared array values
  * @param client - Client-provided array values
+ * @param server - Server-declared array values
  * @returns Deduplicated concatenation
  */
-function mergeArraysUnique(server: unknown[], client: unknown[]): unknown[] {
-  const merged = [...server];
-  for (const item of client) {
+function mergeArraysUnique(client: unknown[], server: unknown[]): unknown[] {
+  const merged = [...client];
+  for (const item of server) {
     if (!merged.some(existing => deepEqual(existing, item))) {
       merged.push(item);
     }

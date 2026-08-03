@@ -1863,6 +1863,38 @@ describe("x402ResourceServer", () => {
       });
     });
 
+    it("passes when the advertised s is a scalar and the echo is an array containing it", () => {
+      const server = new x402ResourceServer();
+      const paymentRequired = buildPaymentRequired({
+        extensions: {
+          "builder-code": { info: { s: "bc_server" } },
+        },
+      });
+      const payload = buildPaymentPayload({
+        extensions: {
+          "builder-code": { info: { s: ["bc_server", "bc_client"] } },
+        },
+      });
+
+      expect(server.validateExtensions(paymentRequired, payload)).toEqual({ valid: true });
+    });
+
+    it("passes when the advertised s is an array and the echo is a matching scalar", () => {
+      const server = new x402ResourceServer();
+      const paymentRequired = buildPaymentRequired({
+        extensions: {
+          "builder-code": { info: { s: ["bc_server"] } },
+        },
+      });
+      const payload = buildPaymentPayload({
+        extensions: {
+          "builder-code": { info: { s: "bc_server" } },
+        },
+      });
+
+      expect(server.validateExtensions(paymentRequired, payload)).toEqual({ valid: true });
+    });
+
     it("passes when only a declared dynamic info field differs", () => {
       const server = new x402ResourceServer();
       server.registerExtension({ key: "siwx", dynamicInfoFields: ["nonce"] });
@@ -2022,6 +2054,54 @@ describe("x402ResourceServer", () => {
             ...req.extra,
             version: "3",
           },
+        },
+      });
+
+      const result = server.findMatchingRequirements([req], payload);
+
+      expect(result).toBeUndefined();
+    });
+
+    it("should not match v2 requirements when accepted.extra array is a superset of the server's", () => {
+      const server = new x402ResourceServer();
+
+      const req = buildPaymentRequirements({
+        scheme: "batch-settlement",
+        network: "eip155:8453" as Network,
+        amount: "1000000",
+        asset: "USDC",
+        extra: { allowedSigners: ["0xalice"] },
+      });
+
+      const payload = buildPaymentPayload({
+        x402Version: 2,
+        accepted: {
+          ...req,
+          extra: { allowedSigners: ["0xmallory", "0xalice"] },
+        },
+      });
+
+      const result = server.findMatchingRequirements([req], payload);
+
+      expect(result).toBeUndefined();
+    });
+
+    it("should not match v2 requirements when accepted.extra array is reordered", () => {
+      const server = new x402ResourceServer();
+
+      const req = buildPaymentRequirements({
+        scheme: "batch-settlement",
+        network: "eip155:8453" as Network,
+        amount: "1000000",
+        asset: "USDC",
+        extra: { allowedSigners: ["0xalice", "0xbob"] },
+      });
+
+      const payload = buildPaymentPayload({
+        x402Version: 2,
+        accepted: {
+          ...req,
+          extra: { allowedSigners: ["0xbob", "0xalice"] },
         },
       });
 

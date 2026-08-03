@@ -1100,4 +1100,56 @@ func TestValidateExtensions(t *testing.T) {
 			t.Fatalf("expected echo mismatch on builder-code, got %+v", r)
 		}
 	})
+
+	t.Run("passes when the echoed array elements are []map[string]interface{} instead of []interface{}", func(t *testing.T) {
+		advertised := map[string]interface{}{
+			"ext": map[string]interface{}{
+				"info": map[string]interface{}{
+					"items": []interface{}{map[string]interface{}{"a": 1.0}},
+				},
+			},
+		}
+		p := payloadWith(map[string]interface{}{
+			"ext": map[string]interface{}{
+				"info": map[string]interface{}{
+					"items": []map[string]interface{}{{"a": 1.0}},
+				},
+			},
+		})
+		if r := server.ValidateExtensions(advertised, p); !r.Valid {
+			t.Fatalf("expected valid echo for []map[string]interface{} element type, got %+v", r)
+		}
+	})
+
+	t.Run("passes when the advertised s is a scalar and the echo is an array containing it", func(t *testing.T) {
+		advertised := map[string]interface{}{
+			"builder-code": map[string]interface{}{
+				"info": map[string]interface{}{"s": "bc_server"},
+			},
+		}
+		p := payloadWith(map[string]interface{}{
+			"builder-code": map[string]interface{}{
+				"info": map[string]interface{}{"s": []interface{}{"bc_server", "bc_client"}},
+			},
+		})
+		if r := server.ValidateExtensions(advertised, p); !r.Valid {
+			t.Fatalf("expected valid echo for scalar advertised s, got %+v", r)
+		}
+	})
+
+	t.Run("passes when the advertised s is an array and the echo is a matching scalar", func(t *testing.T) {
+		advertised := map[string]interface{}{
+			"builder-code": map[string]interface{}{
+				"info": map[string]interface{}{"s": []interface{}{"bc_server"}},
+			},
+		}
+		p := payloadWith(map[string]interface{}{
+			"builder-code": map[string]interface{}{
+				"info": map[string]interface{}{"s": "bc_server"},
+			},
+		})
+		if r := server.ValidateExtensions(advertised, p); !r.Valid {
+			t.Fatalf("expected valid echo for scalar echo of single-element advertised s, got %+v", r)
+		}
+	})
 }

@@ -17,6 +17,15 @@ func TestNewBuilderCodeClientExtensionRejectsInvalidCode(t *testing.T) {
 	NewBuilderCodeClientExtension("Bad-Code")
 }
 
+func TestNewBuilderCodeClientExtensionRejectsTooManyCodes(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Fatal("expected panic for too many service codes")
+		}
+	}()
+	NewBuilderCodeClientExtension("a", "b", "c", "d", "e", "f")
+}
+
 func TestClientExtensionKey(t *testing.T) {
 	if got := NewBuilderCodeClientExtension(serviceCode).Key(); got != BUILDER_CODE {
 		t.Fatalf("expected key %q, got %q", BUILDER_CODE, got)
@@ -92,4 +101,35 @@ func TestDeclareBuilderCodeExtensionShape(t *testing.T) {
 	if _, ok := ext["schema"]; !ok {
 		t.Fatal("expected schema in declaration")
 	}
+	if _, hasS := info["s"]; hasS {
+		t.Fatalf("expected no s field when no service codes given, got %+v", info)
+	}
+}
+
+func TestDeclareBuilderCodeExtensionWithServiceCodes(t *testing.T) {
+	declared := DeclareBuilderCodeExtension(appCode, "bc_server_sdk", "bc_other")
+	ext := declared[BUILDER_CODE].(map[string]interface{})
+	info := ext["info"].(map[string]interface{})
+	want := []string{"bc_server_sdk", "bc_other"}
+	if !reflect.DeepEqual(info["s"], want) {
+		t.Fatalf("expected s=%v, got %v", want, info["s"])
+	}
+}
+
+func TestDeclareBuilderCodeExtensionRejectsInvalidServiceCode(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Fatal("expected panic for invalid service code")
+		}
+	}()
+	DeclareBuilderCodeExtension(appCode, "Bad-Code")
+}
+
+func TestDeclareBuilderCodeExtensionRejectsTooManyServiceCodes(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Fatal("expected panic for too many service codes")
+		}
+	}()
+	DeclareBuilderCodeExtension(appCode, "a", "b", "c", "d", "e", "f")
 }

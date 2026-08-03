@@ -14,7 +14,7 @@ import {
 import { SchemeNetworkServer, SchemePaymentRequiredContext } from "../types/mechanisms";
 import { Price, Network, ResourceServerExtension, ResourceServerExtensionHooks } from "../types";
 import type { DeepReadonly } from "../types/readonly";
-import { deepEqual, findByNetworkAndScheme } from "../utils";
+import { deepEqual, findByNetworkAndScheme, toComparableArray } from "../utils";
 import {
   assertAcceptsAllowlistedAfterExtensionEnrich,
   assertAcceptsAdditiveExtraAfterSchemeEnrich,
@@ -1685,13 +1685,15 @@ function omitFields(value: unknown, fields?: string[]): unknown {
 
 /**
  * Returns whether a client-echoed extension payload preserves the server advertisement.
+ * Array fields are additive (e.g. builder-code `s`), unlike the exact-match arrays
+ * required when matching a client's selected `extra` fields against the server's.
  *
  * @param advertised - Extension info advertised by the server.
  * @param echoed - Extension info echoed back by the client.
  * @returns True when `echoed` contains every field from `advertised`.
  */
 function extensionInfoMatchesAdvertised(advertised: unknown, echoed: unknown): boolean {
-  return objectContainsSubset(advertised, echoed);
+  return objectContainsSubset(advertised, echoed, true);
 }
 
 /**
@@ -1724,24 +1726,32 @@ function paymentRequirementsMatchAccepted(
 
 /**
  * Recursively checks that `actual` contains every field and value from `expected`.
- * Object values may contain additional fields. Arrays are additive: every element
- * of `expected` must appear in `actual` (extra elements allowed). Primitives must
- * match exactly.
+ * Object values may contain additional fields. Primitives must match exactly.
+ *
+ * When `additiveArrays` is true (extension info echoes), arrays are additive:
+ * every element of `expected` must appear in `actual` (extra elements allowed),
+ * and a bare scalar on either side is treated as a single-element array so it
+ * compares against an array on the other side. When false (payment-requirements
+ * `extra` matching), arrays must match exactly via `deepEqual`, same as any
+ * other primitive.
  *
  * @param expected - Required subset.
  * @param actual - Candidate object.
+ * @param additiveArrays - Whether array fields are additive rather than exact-match.
  * @returns True when `actual` contains `expected`.
  */
-function objectContainsSubset(expected: unknown, actual: unknown): boolean {
-  if (expected === null || typeof expected !== "object") {
-    return deepEqual(expected, actual);
-  }
-
-  if (Array.isArray(expected)) {
-    if (!Array.isArray(actual)) {
+function objectContainsSubset(expected: unknown, actual: unknown, additiveArrays = false): boolean {
+  if (additiveArrays && (Array.isArray(expected) || Array.isArray(actual))) {
+    const expectedArray = toComparableArray(expected);
+    const actualArray = toComparableArray(actual);
+    if (!expectedArray || !actualArray) {
       return false;
     }
-    return expected.every(expItem => actual.some(actItem => deepEqual(expItem, actItem)));
+    return expectedArray.every(expItem => actualArray.some(actItem => deepEqual(expItem, actItem)));
+  }
+
+  if (expected === null || typeof expected !== "object" || Array.isArray(expected)) {
+    return deepEqual(expected, actual);
   }
 
   if (actual === null || typeof actual !== "object" || Array.isArray(actual)) {
@@ -1754,7 +1764,7 @@ function objectContainsSubset(expected: unknown, actual: unknown): boolean {
     if (!hasActualKey) {
       return value === undefined;
     }
-    return objectContainsSubset(value, actualRecord[key]);
+    return objectContainsSubset(value, actualRecord[key], additiveArrays);
   });
 }
 

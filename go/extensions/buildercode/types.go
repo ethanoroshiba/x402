@@ -3,8 +3,10 @@
 // The extension enables attribution tracking for x402 payments by appending
 // ERC-8021 Schema 2 builder codes to settlement transaction calldata. Three
 // parties attach their builder code:
-//   - Server: declares "a" (app) in the 402 response via DeclareBuilderCodeExtension.
-//   - Client: adds "s" (service) via BuilderCodeClientExtension.
+//   - Server: declares "a" (app), and optionally its own "s" (service) code(s),
+//     in the 402 response via DeclareBuilderCodeExtension.
+//   - Client: adds "s" (service) via NewBuilderCodeClientExtension; when the
+//     server also declared "s", the core client merges both (client first).
 //   - Facilitator: optionally adds "w" (wallet) at settlement via BuilderCodeFacilitatorExtension.
 package buildercode
 

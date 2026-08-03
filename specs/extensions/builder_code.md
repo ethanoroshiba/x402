@@ -146,7 +146,9 @@ The `w` (wallet) field is **not** set by the client. It is added by the facilita
 | ----- | --------------------------------- | --------------- |
 | `a`   | Yes                               | Echo server value (via core merge) |
 | `a`   | No                                | MUST NOT set |
-| `s`   | Either                            | SHOULD attach when `BuilderCodeClientExtension` is registered; when the server also declares `s`, core merge concatenates server then client codes (deduped) |
+| `s`   | Either                            | SHOULD attach when `BuilderCodeClientExtension` is registered; when the server also declares `s`, core merge concatenates client then server codes (deduped), so a downstream length cap trims excess server entries rather than the client's |
+
+`s` accepts a bare string or an array of strings on either side; a scalar on one side merges as a single-element array against an array on the other. Combined `s` entries are capped at 5 (see [Builder Code Validation](#builder-code-validation)); declaring more than 5 at either the application or client layer is rejected.
 
 ---
 
@@ -269,7 +271,7 @@ All builder codes (`a`, `w`, and each entry in `s`) must:
 - Be 1-32 characters long
 - Contain only lowercase letters, digits, and underscores
 
-Invalid codes must be rejected at declaration time (application) and at construction time (facilitator). The facilitator validates each entry in `s` for format only — `s` is client self-reported and cannot be verified against any authoritative source.
+Invalid codes must be rejected at declaration time (application) and at construction time (facilitator). The facilitator validates each entry in `s` for format only — `s` is client self-reported and cannot be verified against any authoritative source. Declaring or attaching more than 5 service codes at the application or client layer must be rejected; the facilitator truncates any combined `s` beyond 5 entries when encoding the settlement suffix.
 
 ### App Code Echo Validation
 
@@ -299,6 +301,6 @@ Off-chain parsers can extract builder code attribution from settlement calldata 
 
 | Role            | Responsibility                                                                                              |
 | --------------- | ----------------------------------------------------------------------------------------------------------- |
-| **Application** | Declares `a` (app code) per-route in the payment middleware configuration                                   |
+| **Application** | Declares `a` (app code) per-route in the payment middleware configuration, and optionally its own service code(s) as `s` (e.g. attribution for a server-side SDK) |
 | **Client**      | Attaches service code(s) as `s` when `BuilderCodeClientExtension` is registered; echoes `a` only when the server declared `builder-code` |
 | **Facilitator** | Adds `w` (wallet code) at settlement, encodes the full CBOR suffix (`a`, `s`, `w`), appends to calldata    |

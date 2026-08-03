@@ -107,6 +107,24 @@ def test_rejects_when_echoed_s_array_drops_advertised_element() -> None:
     assert result.extension_key == BUILDER_CODE
 
 
+def test_passes_when_advertised_s_is_a_scalar_and_echo_is_an_array_containing_it() -> None:
+    server = x402ResourceServer()
+    required = _payment_required({BUILDER_CODE: {"info": {"s": "bc_server"}, "schema": 2}})
+    payload = _payment_payload(
+        {BUILDER_CODE: {"info": {"s": ["bc_server", "bc_client"]}, "schema": 2}}
+    )
+
+    assert server.validate_extensions(required, payload).valid
+
+
+def test_passes_when_advertised_s_is_an_array_and_echo_is_a_matching_scalar() -> None:
+    server = x402ResourceServer()
+    required = _payment_required({BUILDER_CODE: {"info": {"s": ["bc_server"]}, "schema": 2}})
+    payload = _payment_payload({BUILDER_CODE: {"info": {"s": "bc_server"}, "schema": 2}})
+
+    assert server.validate_extensions(required, payload).valid
+
+
 def test_rejects_when_advertised_field_missing() -> None:
     server = x402ResourceServer()
     required = _payment_required({BUILDER_CODE: {"info": {"a": "bc_myapp"}, "schema": 2}})

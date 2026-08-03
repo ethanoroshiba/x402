@@ -239,3 +239,23 @@ export function deepEqual(obj1: unknown, obj2: unknown): boolean {
     return JSON.stringify(obj1) === JSON.stringify(obj2);
   }
 }
+
+/**
+ * Coerces a value for array-aware merging/comparison: an array passes through
+ * unchanged, while a bare scalar is wrapped as a single-element array so it can
+ * merge or compare against an array declared on the other side (e.g. an
+ * extension field documented as "string or array of strings"). Returns
+ * undefined for values that cannot participate (null, undefined, objects).
+ *
+ * @param value - Value to coerce
+ * @returns The value as an array, or undefined if it cannot be treated as one
+ */
+export function toComparableArray(value: unknown): unknown[] | undefined {
+  if (Array.isArray(value)) {
+    return value;
+  }
+  if (value === null || value === undefined || typeof value === "object") {
+    return undefined;
+  }
+  return [value];
+}

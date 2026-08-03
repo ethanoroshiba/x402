@@ -449,7 +449,38 @@ class TestRegisterExtension:
         payload = await client.create_payment_payload(payment_required)
         assert payload.extensions is not None
         assert payload.extensions["builder-code"] == {
-            "info": {"a": "bc_app", "s": ["bc_server", "bc_shared", "bc_client"]},
+            "info": {"a": "bc_app", "s": ["bc_shared", "bc_client", "bc_server"]},
+            "schema": {"type": "object"},
+        }
+
+    @pytest.mark.asyncio
+    async def test_merges_a_scalar_field_against_an_array_on_the_other_side(self):
+        class Ext:
+            key = "builder-code"
+
+            def enrich_payment_payload(self, payload, payment_required):
+                extensions = dict(payload.extensions or {})
+                extensions["builder-code"] = {"info": {"s": ["bc_client"]}}
+                return payload.model_copy(update={"extensions": extensions})
+
+        client = x402Client()
+        client.register("eip155:8453", MockSchemeClient("exact"))
+        client.register_extension(Ext())
+
+        payment_required = PaymentRequired(
+            x402_version=2,
+            accepts=[_make_payment_requirements()],
+            extensions={
+                "builder-code": {
+                    "info": {"a": "bc_app", "s": "bc_server"},
+                    "schema": {"type": "object"},
+                }
+            },
+        )
+        payload = await client.create_payment_payload(payment_required)
+        assert payload.extensions is not None
+        assert payload.extensions["builder-code"] == {
+            "info": {"a": "bc_app", "s": ["bc_client", "bc_server"]},
             "schema": {"type": "object"},
         }
 

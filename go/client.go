@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"sync"
 
 	"github.com/x402-foundation/x402/go/v2/types"
@@ -578,8 +579,10 @@ func asStringMap(v interface{}) (map[string]interface{}, bool) {
 // on both sides whose values are objects, server fields win and only client
 // fields the server did not declare are added (recursing into nested objects).
 // When both sides declare the same array field (e.g. builder-code `s`), values
-// are concatenated with server entries first and duplicates removed. For any
-// other key the client value is used.
+// are concatenated with client entries first (so a downstream length cap trims
+// server entries rather than the client's) and duplicates removed; a scalar on
+// either side is treated as a single-element array. For any other key the client
+// value is used.
 func mergeExtensions(server, client map[string]interface{}) map[string]interface{} {
 	if client == nil {
 		return server
@@ -603,7 +606,7 @@ func mergeExtensions(server, client map[string]interface{}) map[string]interface
 
 		// Deep-merge into a copy of the server object, preserving server fields and
 		// only adding client fields the server did not declare. Conflicting arrays
-		// are concatenated (server first) with duplicates removed.
+		// are concatenated (client first) with duplicates removed.
 		extensionValue := make(map[string]interface{}, len(serverMap))
 		for k, v := range serverMap {
 			extensionValue[k] = v
@@ -626,8 +629,16 @@ func mergeExtensions(server, client map[string]interface{}) map[string]interface
 				}
 				serverSlice, ssOk := asSlice(target[fieldKey])
 				clientSlice, csOk := asSlice(clientFieldVal)
+				// A scalar on one side (e.g. builder-code `s` sent as a bare string)
+				// merges as a single-element array against an array on the other side.
+				if !ssOk && csOk {
+					serverSlice, ssOk = asScalarSingleton(target[fieldKey])
+				}
+				if !csOk && ssOk {
+					clientSlice, csOk = asScalarSingleton(clientFieldVal)
+				}
 				if ssOk && csOk {
-					target[fieldKey] = mergeSlicesUnique(serverSlice, clientSlice)
+					target[fieldKey] = mergeSlicesUnique(clientSlice, serverSlice)
 					continue
 				}
 				if _, exists := target[fieldKey]; !exists {
@@ -642,29 +653,57 @@ func mergeExtensions(server, client map[string]interface{}) map[string]interface
 }
 
 // asSlice returns v as a []interface{} so array fields can participate in merge
-// and echo subset checks. Supports []interface{} (JSON shape) and []string
-// (common when Go code builds extension maps directly).
+// and echo subset checks. []interface{} is returned directly; any other slice or
+// array type (e.g. []string, []map[string]interface{} built directly by Go scheme
+// code) is coerced via a JSON round-trip, mirroring the payload's eventual
+// serialization. Non-slice values return ok=false so the caller treats them
+// atomically or as a scalar (see asScalarSingleton).
 func asSlice(v interface{}) ([]interface{}, bool) {
-	switch s := v.(type) {
-	case []interface{}:
+	if s, ok := v.([]interface{}); ok {
 		return s, true
-	case []string:
-		out := make([]interface{}, len(s))
-		for i, x := range s {
-			out[i] = x
-		}
-		return out, true
+	}
+	if v == nil {
+		return nil, false
+	}
+	switch reflect.ValueOf(v).Kind() {
+	case reflect.Slice, reflect.Array:
 	default:
 		return nil, false
 	}
+	data, err := json.Marshal(v)
+	if err != nil {
+		return nil, false
+	}
+	var s []interface{}
+	if err := json.Unmarshal(data, &s); err != nil {
+		return nil, false
+	}
+	return s, true
 }
 
-// mergeSlicesUnique concatenates server then client, dropping client items that
-// already appear in the result (DeepEqual).
-func mergeSlicesUnique(server, client []interface{}) []interface{} {
-	merged := make([]interface{}, len(server), len(server)+len(client))
-	copy(merged, server)
-	for _, item := range client {
+// asScalarSingleton wraps a non-nil, non-array, non-map value in a single-element
+// slice so a scalar declaration (e.g. builder-code `s` sent as a bare string) can
+// merge or compare against an array declared on the other side.
+func asScalarSingleton(v interface{}) ([]interface{}, bool) {
+	if v == nil {
+		return nil, false
+	}
+	switch reflect.ValueOf(v).Kind() {
+	case reflect.Slice, reflect.Array, reflect.Map:
+		return nil, false
+	default:
+		return []interface{}{v}, true
+	}
+}
+
+// mergeSlicesUnique concatenates client then server, dropping server items that
+// already appear in the result (DeepEqual). Client entries lead so a downstream
+// cap on array length (e.g. builder-code's MAX_SERVICE_CODES) truncates excess
+// server entries rather than the client's.
+func mergeSlicesUnique(client, server []interface{}) []interface{} {
+	merged := make([]interface{}, len(client), len(client)+len(server))
+	copy(merged, client)
+	for _, item := range server {
 		found := false
 		for _, existing := range merged {
 			if DeepEqual(existing, item) {

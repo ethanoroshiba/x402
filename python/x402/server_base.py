@@ -115,16 +115,36 @@ def _omit_fields(value: Any, fields: list[str] | None) -> Any:
     return {key: item for key, item in value.items() if key not in fields}
 
 
+def _to_comparable_list(value: Any) -> list[Any] | None:
+    """Coerce a value for additive list comparison.
+
+    A list passes through unchanged; a bare scalar is wrapped as a
+    single-element list so it can compare against a list on the other side
+    (e.g. builder-code ``s`` accepts a string or a list of strings). Returns
+    ``None`` for values that cannot participate (``None``, dicts).
+    """
+    if isinstance(value, list):
+        return value
+    if value is None or isinstance(value, dict):
+        return None
+    return [value]
+
+
 def _object_contains_subset(expected: Any, actual: Any) -> bool:
     """Return whether ``actual`` contains every field/value from ``expected``.
 
     Object values may add fields. Lists are additive: every element of
-    ``expected`` must appear in ``actual``. Primitives must match exactly.
+    ``expected`` must appear in ``actual``, and a bare scalar on either side is
+    treated as a single-element list. Primitives must match exactly.
     """
-    if isinstance(expected, list):
-        if not isinstance(actual, list):
+    if isinstance(expected, list) or isinstance(actual, list):
+        expected_list = _to_comparable_list(expected)
+        actual_list = _to_comparable_list(actual)
+        if expected_list is None or actual_list is None:
             return False
-        return all(any(exp_item == act_item for act_item in actual) for exp_item in expected)
+        return all(
+            any(exp_item == act_item for act_item in actual_list) for exp_item in expected_list
+        )
     if not isinstance(expected, dict):
         return expected == actual
     if not isinstance(actual, dict):

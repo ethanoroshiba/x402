@@ -104,6 +104,31 @@ describe("Builder Code Extension", () => {
     it("rejects invalid app codes", () => {
       expect(() => declareBuilderCodeExtension("INVALID")).toThrow(/Invalid builder code/);
     });
+
+    it("omits s when no service codes are given", () => {
+      const declared = declareBuilderCodeExtension(APP);
+      expect(declared.info).toEqual({ a: APP });
+    });
+
+    it("declares service codes when given", () => {
+      const declared = declareBuilderCodeExtension(APP, ["bc_server_sdk", "bc_other"]);
+      expect(declared.info).toEqual({ a: APP, s: ["bc_server_sdk", "bc_other"] });
+    });
+
+    it("declares a single service code when given a string", () => {
+      const declared = declareBuilderCodeExtension(APP, "bc_server_sdk");
+      expect(declared.info).toEqual({ a: APP, s: ["bc_server_sdk"] });
+    });
+
+    it("rejects invalid service codes", () => {
+      expect(() => declareBuilderCodeExtension(APP, "Bad-Code")).toThrow(/Invalid builder code/);
+    });
+
+    it("rejects more than MAX_SERVICE_CODES service codes", () => {
+      expect(() => declareBuilderCodeExtension(APP, ["a", "b", "c", "d", "e", "f"])).toThrow(
+        /Too many service codes/,
+      );
+    });
   });
 
   describe("BuilderCodeClientExtension", () => {
@@ -114,6 +139,12 @@ describe("Builder Code Extension", () => {
     it("rejects when any code in an array is invalid", () => {
       expect(() => new BuilderCodeClientExtension([SERVICE, "Bad-Code"])).toThrow(
         /Invalid builder code/,
+      );
+    });
+
+    it("rejects more than MAX_SERVICE_CODES service codes", () => {
+      expect(() => new BuilderCodeClientExtension(["a", "b", "c", "d", "e", "f"])).toThrow(
+        /Too many service codes/,
       );
     });
 

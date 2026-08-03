@@ -55,7 +55,9 @@ def _merge_extensions(
     it populates (e.g. the signed ``from``/``signature``/... permit data). For
     conflicting scalar leaf fields the server value wins. When both sides
     declare the same list field (e.g. builder-code ``s``), values are
-    concatenated with server entries first and duplicates removed.
+    concatenated with client entries first (so a downstream length cap trims
+    server entries rather than the client's) and duplicates removed; a bare
+    scalar on either side is treated as a single-element list.
 
     Without this, a shallow ``{**server, **client}`` replace would drop the
     server's ``schema`` from gas-sponsoring extensions, which strict Go/TS
@@ -86,20 +88,36 @@ def _merge_extensions(
     return merged
 
 
-def _merge_lists_unique(server: list[Any], client: list[Any]) -> list[Any]:
-    """Concatenate ``server`` then ``client``, dropping client duplicates."""
-    merged = list(server)
-    for item in client:
+def _merge_lists_unique(client: list[Any], server: list[Any]) -> list[Any]:
+    """Concatenate ``client`` then ``server``, dropping server duplicates.
+
+    Client entries lead so a downstream length cap (e.g. builder-code's
+    MAX_SERVICE_CODES) trims excess server entries rather than the client's.
+    """
+    merged = list(client)
+    for item in server:
         if item not in merged:
             merged.append(item)
     return merged
+
+
+def _scalar_to_list(value: Any) -> list[Any] | None:
+    """Wrap a bare scalar as a single-element list for merging against a list
+    field on the other side (e.g. builder-code ``s`` accepts a string or a
+    list of strings). Returns ``None`` for values that cannot participate
+    (missing, dict).
+    """
+    if value is None or isinstance(value, dict):
+        return None
+    return [value]
 
 
 def _deep_overlay(target: dict[str, Any], source: dict[str, Any]) -> dict[str, Any]:
     """Recursively overlay ``source`` onto a copy of ``target``.
 
     Nested dicts are merged recursively; conflicting lists are concatenated
-    (server first, deduped); for other leaf fields the existing ``target``
+    (client first, deduped), with a bare scalar on either side treated as a
+    single-element list; for other leaf fields the existing ``target``
     (server) value is kept and only missing keys are added from ``source``
     (client). Matches the TS ``mergeExtensions`` inner loop.
     """
@@ -108,8 +126,17 @@ def _deep_overlay(target: dict[str, Any], source: dict[str, Any]) -> dict[str, A
         target_value = result.get(field_key)
         if isinstance(target_value, dict) and isinstance(source_value, dict):
             result[field_key] = _deep_overlay(target_value, source_value)
-        elif isinstance(target_value, list) and isinstance(source_value, list):
-            result[field_key] = _merge_lists_unique(target_value, source_value)
+        elif isinstance(target_value, list) or isinstance(source_value, list):
+            target_list = (
+                target_value if isinstance(target_value, list) else _scalar_to_list(target_value)
+            )
+            source_list = (
+                source_value if isinstance(source_value, list) else _scalar_to_list(source_value)
+            )
+            if target_list is not None and source_list is not None:
+                result[field_key] = _merge_lists_unique(source_list, target_list)
+            elif field_key not in result:
+                result[field_key] = source_value
         elif field_key not in result:
             result[field_key] = source_value
     return result

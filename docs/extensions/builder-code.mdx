@@ -17,7 +17,7 @@ Three parties each contribute an attribution code:
 |-------|--------|-------------|
 | `a` | Resource server | App code — identifies the application exposing the paid endpoint |
 | `w` | Facilitator | Wallet code — identifies the facilitator settling the payment on-chain |
-| `s` | Client and/or server | Service code(s) — attribution codes from the payment path; when both declare `s`, core merge concatenates server then client (deduped) |
+| `s` | Client and/or server | Service code(s) — attribution codes from the payment path; when both declare `s`, core merge concatenates client then server (deduped) so a downstream length cap trims server entries rather than the client's |
 
 These codes are CBOR-encoded as an [ERC-8021](https://eip.tools/eip/8021) Schema 2 suffix and appended to the settlement transaction calldata. Off-chain tools can parse the calldata to verify attribution.
 
@@ -141,7 +141,13 @@ app.add_middleware(PaymentMiddlewareASGI, routes=routes, server=server)
   </Tab>
 </Tabs>
 
-`declareBuilderCodeExtension` / `DeclareBuilderCodeExtension` validates the code format and returns the extension declaration (including the JSON Schema) for inclusion in the `PaymentRequired` response.
+`declareBuilderCodeExtension` / `DeclareBuilderCodeExtension` validates the code format and returns the extension declaration (including the JSON Schema) for inclusion in the `PaymentRequired` response. It also accepts optional service code(s), for cases where the application itself wants to attribute a dependency (e.g. a server-side SDK):
+
+```typescript
+declareBuilderCodeExtension("bc_my_app", "bc_server_sdk");
+```
+
+Client-provided service codes are merged with these by the core client (client entries first).
 
 ## Quickstart for Buyers (Clients)
 
@@ -346,7 +352,7 @@ Wire order: `[cborData][cborLength (2B)][schemaId (1B)][ercMarker (16B)]`
 
 ### Server
 
-#### `declareBuilderCodeExtension(appCode)`
+#### `declareBuilderCodeExtension(appCode, serviceCodes?)`
 
 Validates `appCode` and returns the extension declaration for `PaymentRequired.extensions`.
 
@@ -356,9 +362,14 @@ import { BUILDER_CODE, declareBuilderCodeExtension } from "@x402/extensions/buil
 extensions: {
   [BUILDER_CODE]: declareBuilderCodeExtension("bc_my_app"),
 }
+
+// Optionally declare the application's own service code(s) as well
+extensions: {
+  [BUILDER_CODE]: declareBuilderCodeExtension("bc_my_app", "bc_server_sdk"),
+}
 ```
 
-Throws if `appCode` does not match `^[a-z0-9_]{1,32}$`.
+Throws if `appCode` or any `serviceCodes` entry does not match `^[a-z0-9_]{1,32}$`, or if more than `MAX_SERVICE_CODES` service codes are given.
 
 ### Client
 
@@ -374,9 +385,9 @@ client.registerExtension(new BuilderCodeClientExtension("bc_my_client"));
 client.registerExtension(new BuilderCodeClientExtension(["bc_mcp_server", "bc_my_app"]));
 ```
 
-Accepts a single string or an array of strings. Attaches the client's `s` code(s) to every payment payload when registered. When the server declared `builder-code`, the core client merge also preserves the server's `a` code. Multiple codes are useful for layered clients (e.g. an MCP server acting as middleware) that need to attribute multiple participants.
+Accepts a single string or an array of strings. Attaches the client's `s` code(s) to every payment payload when registered. When the server declared `builder-code`, the core client merge also preserves the server's `a` code, concatenating any server-declared `s` with the client's (client entries first). Multiple codes are useful for layered clients (e.g. an MCP server acting as middleware) that need to attribute multiple participants. Throws if more than `MAX_SERVICE_CODES` codes are given.
 
-<Note>Facilitators cap `s` to the first **5** entries (`MAX_SERVICE_CODES`) at settlement to bound calldata size. Extra entries are silently dropped.</Note>
+<Note>Facilitators cap the combined `s` to the first **5** entries (`MAX_SERVICE_CODES`) at settlement to bound calldata size; extra entries are silently dropped. `declareBuilderCodeExtension` and `BuilderCodeClientExtension` each reject more than 5 codes at their own layer, but the combined total from both sides can still exceed 5 — keep each side's contribution small.</Note>
 
 ### Facilitator
 

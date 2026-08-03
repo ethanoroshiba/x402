@@ -668,7 +668,7 @@ func TestMergeExtensions(t *testing.T) {
 		if !ok {
 			t.Fatalf("expected merged s array, got %T", info["s"])
 		}
-		want := []interface{}{"bc_server", "bc_shared", "bc_client"}
+		want := []interface{}{"bc_shared", "bc_client", "bc_server"}
 		if !DeepEqual(got, want) {
 			t.Fatalf("expected s=%v, got %v", want, got)
 		}
@@ -692,8 +692,56 @@ func TestMergeExtensions(t *testing.T) {
 		merged := mergeExtensions(server, client)
 		info := merged["builder-code"].(map[string]interface{})["info"].(map[string]interface{})
 		got, ok := asSlice(info["s"])
-		if !ok || !DeepEqual(got, []interface{}{"bc_server", "bc_client"}) {
-			t.Fatalf("expected [bc_server bc_client], got %v", info["s"])
+		if !ok || !DeepEqual(got, []interface{}{"bc_client", "bc_server"}) {
+			t.Fatalf("expected [bc_client bc_server], got %v", info["s"])
+		}
+	})
+
+	t.Run("merges []map[string]interface{} array fields via JSON round-trip", func(t *testing.T) {
+		server := map[string]interface{}{
+			"ext": map[string]interface{}{
+				"info": map[string]interface{}{
+					"items": []interface{}{map[string]interface{}{"a": 1.0}},
+				},
+			},
+		}
+		client := map[string]interface{}{
+			"ext": map[string]interface{}{
+				"info": map[string]interface{}{
+					"items": []map[string]interface{}{{"a": 1.0}, {"b": 2.0}},
+				},
+			},
+		}
+
+		merged := mergeExtensions(server, client)
+		info := merged["ext"].(map[string]interface{})["info"].(map[string]interface{})
+		got, ok := asSlice(info["items"])
+		want := []interface{}{
+			map[string]interface{}{"a": 1.0},
+			map[string]interface{}{"b": 2.0},
+		}
+		if !ok || !DeepEqual(got, want) {
+			t.Fatalf("expected %v, got %v (ok=%v)", want, got, ok)
+		}
+	})
+
+	t.Run("merges a scalar against an array on the other side", func(t *testing.T) {
+		server := map[string]interface{}{
+			"builder-code": map[string]interface{}{
+				"info": map[string]interface{}{"s": "bc_server"},
+			},
+		}
+		client := map[string]interface{}{
+			"builder-code": map[string]interface{}{
+				"info": map[string]interface{}{"s": []interface{}{"bc_client"}},
+			},
+		}
+
+		merged := mergeExtensions(server, client)
+		info := merged["builder-code"].(map[string]interface{})["info"].(map[string]interface{})
+		got, ok := asSlice(info["s"])
+		if !ok || !DeepEqual(got, []interface{}{"bc_client", "bc_server"}) {
+			t.Fatalf("expected [bc_client bc_server], got %v", info["s"])
 		}
 	})
 }

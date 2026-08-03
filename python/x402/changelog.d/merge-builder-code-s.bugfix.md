@@ -1,1 +1,1 @@
-Merge server and client builder-code `s` arrays during extension re-merge, and treat echoed arrays as additive in extension echo validation.
+Merge server and client builder-code `s` arrays during extension re-merge instead of dropping the client's, treat echoed extension-info lists as additive (client-first, deduped, with scalar/list coercion) in extension echo validation, and let `declare_builder_code_extension` optionally declare service codes for the application itself.

@@ -807,9 +807,20 @@ func (s *x402ResourceServer) ValidateExtensions(
 		mismatch := false
 		pending := []pair{{advertised, echoed}}
 		for i := 0; i < len(pending) && !mismatch; i++ {
-			if advSlice, ok := asSlice(pending[i].advertised); ok {
-				echoSlice, ok := asSlice(pending[i].echoed)
-				if !ok || !arrayContainsSubset(advSlice, echoSlice) {
+			advSlice, advIsSlice := asSlice(pending[i].advertised)
+			echoSlice, echoIsSlice := asSlice(pending[i].echoed)
+			// A scalar on either side (e.g. builder-code `s` sent as a bare string)
+			// is treated as a single-element array so it compares against an array
+			// on the other side. Two scalars fall through to the plain DeepEqual
+			// comparison below unchanged.
+			if advIsSlice || echoIsSlice {
+				if !advIsSlice {
+					advSlice, advIsSlice = asScalarSingleton(pending[i].advertised)
+				}
+				if !echoIsSlice {
+					echoSlice, echoIsSlice = asScalarSingleton(pending[i].echoed)
+				}
+				if !advIsSlice || !echoIsSlice || !arrayContainsSubset(advSlice, echoSlice) {
 					mismatch = true
 				}
 				continue

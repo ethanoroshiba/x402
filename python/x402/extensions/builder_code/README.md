@@ -8,8 +8,8 @@ This package implements ERC-8021 **Schema 2** (CBOR-encoded). See the [protocol 
 
 ## How it works
 
-1. **Servers** declare their app code (`a`) in the 402 `PaymentRequired.extensions`.
-2. **Clients** attach their own service code(s) (`s`) to `PaymentPayload.extensions` whenever `BuilderCodeClientExtension` is registered. When the server declared `builder-code`, the core client merge preserves the server's `a` and concatenates any server-declared `s` with the client's (server first, deduped).
+1. **Servers** declare their app code (`a`), and optionally their own service code(s) (`s`), in the 402 `PaymentRequired.extensions`.
+2. **Clients** attach their own service code(s) (`s`) to `PaymentPayload.extensions` whenever `BuilderCodeClientExtension` is registered. When the server declared `builder-code`, the core client merge preserves the server's `a` and concatenates any server-declared `s` with the client's (client first, deduped) — a bare string on either side is treated as a single-element list.
 3. **Facilitators** add their wallet code (`w`) at settlement, CBOR-encode the combined fields, and append the ERC-8021 suffix to the settlement calldata.
 
 All codes must match `^[a-z0-9_]{1,32}$` (1-32 characters, lowercase alphanumeric and underscores). Invalid codes raise at construction/declaration time.
@@ -22,6 +22,12 @@ Declare the app code in your payment requirements. The helper returns an `{ "inf
 from x402.extensions.builder_code import declare_builder_code_extension, BUILDER_CODE
 
 extensions = {BUILDER_CODE: declare_builder_code_extension("bc_my_service")}
+```
+
+Pass an optional second argument to also declare the application's own service code(s) (e.g. attribution for a server-side SDK the service depends on):
+
+```python
+declare_builder_code_extension("bc_my_service", "bc_server_sdk")
 ```
 
 ## For clients
@@ -69,13 +75,13 @@ if data:
 
 ## API reference
 
-### `declare_builder_code_extension(app_code)`
+### `declare_builder_code_extension(app_code, service_codes=None)`
 
-Creates the `{ "info": { "a" }, "schema" }` declaration for `PaymentRequired.extensions`. Raises `ValueError` if `app_code` is not a valid builder code.
+Creates the `{ "info": { "a", "s"? }, "schema" }` declaration for `PaymentRequired.extensions`. Raises `ValueError` if `app_code` or any `service_codes` entry is not a valid builder code, or if more than `MAX_SERVICE_CODES` service codes are given.
 
 ### `BuilderCodeClientExtension`
 
-Client extension that attaches the client's service code(s) as `s`. Constructor accepts a single string or a list of strings; raises on any invalid code.
+Client extension that attaches the client's service code(s) as `s`. Constructor accepts a single string or a list of strings; raises on any invalid code or on more than `MAX_SERVICE_CODES` codes.
 
 ### `BuilderCodeFacilitatorExtension`
 
