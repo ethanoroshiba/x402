@@ -52,7 +52,7 @@ func (e *BuilderCodeFacilitatorExtension) BuildDataSuffix(ctx evm.DataSuffixCont
 	data.S = resolveServiceCodes(clientExt["s"])
 	if e.ServiceCode != "" {
 		if !validateCode(e.ServiceCode) {
-			return nil, fmt.Errorf("invalid builder code: %q. Must be 1-32 characters, lowercase alphanumeric and underscores only.", e.ServiceCode)
+			return nil, fmt.Errorf("invalid builder code %q: must be 1-32 characters, lowercase alphanumeric and underscores only", e.ServiceCode)
 		}
 		if !containsCode(data.S, e.ServiceCode) {
 			data.S = append(data.S, e.ServiceCode)
