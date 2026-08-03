@@ -5,6 +5,7 @@ import pytest
 from x402 import x402Client
 from x402.extensions.builder_code import (
     BUILDER_CODE,
+    MAX_CLIENT_SERVICE_CODES,
     BuilderCodeClientExtension,
     declare_builder_code_extension,
 )
@@ -44,8 +45,13 @@ class TestConstructorValidation:
             BuilderCodeClientExtension([SERVICE, "Bad-Code"])
 
     def test_rejects_too_many_service_codes(self) -> None:
+        too_many = [f"bc_{i}" for i in range(MAX_CLIENT_SERVICE_CODES + 1)]
         with pytest.raises(ValueError, match="Too many service codes"):
-            BuilderCodeClientExtension(["a", "b", "c", "d", "e", "f"])
+            BuilderCodeClientExtension(too_many)
+
+    def test_accepts_exactly_max_client_service_codes(self) -> None:
+        at_max = [f"bc_{i}" for i in range(MAX_CLIENT_SERVICE_CODES)]
+        BuilderCodeClientExtension(at_max)
 
 
 class TestEnrichPaymentPayload:

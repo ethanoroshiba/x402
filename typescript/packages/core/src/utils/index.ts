@@ -272,3 +272,18 @@ export function toComparableArray(value: unknown): unknown[] | undefined {
 export const ADDITIVE_ARRAY_INFO_FIELDS: Record<string, ReadonlySet<string>> = {
   "builder-code": new Set(["s"]),
 };
+
+/**
+ * Caps the combined echoed length of an additive array field (see
+ * {@link ADDITIVE_ARRAY_INFO_FIELDS}) so a hand-crafted payload cannot pad the
+ * field past the sum of every party's own reservation and later crowd out a
+ * legitimately declared entry once truncated further downstream (e.g. by a
+ * facilitator extension). Core has no dependency on extension packages, so
+ * this value (builder-code's `MAX_CLIENT_SERVICE_CODES` +
+ * `MAX_SERVER_SERVICE_CODES`) is duplicated from
+ * `packages/extensions/src/builder-code/types.ts` and must be kept in sync by
+ * hand.
+ */
+export const ADDITIVE_ARRAY_MAX_LENGTHS: Record<string, Record<string, number>> = {
+  "builder-code": { s: 10 },
+};

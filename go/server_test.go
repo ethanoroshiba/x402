@@ -3,6 +3,7 @@ package x402
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -1098,6 +1099,53 @@ func TestValidateExtensions(t *testing.T) {
 		r := server.ValidateExtensions(advertised, p)
 		if r.Valid || r.InvalidReason != "extension_echo_mismatch" || r.ExtensionKey != "builder-code" {
 			t.Fatalf("expected echo mismatch on builder-code, got %+v", r)
+		}
+	})
+
+	t.Run("fails when echoed array exceeds the combined client+server budget even as a superset", func(t *testing.T) {
+		// Regression test: a hand-crafted echo padding `s` past the combined
+		// budget must be rejected outright rather than accepted and left to be
+		// silently truncated downstream (e.g. by a facilitator extension),
+		// which could crowd out the legitimately advertised entry.
+		advertised := map[string]interface{}{
+			"builder-code": map[string]interface{}{
+				"info": map[string]interface{}{"s": []interface{}{"bc_server"}},
+			},
+		}
+		padded := make([]interface{}, 0, 11)
+		padded = append(padded, "bc_server")
+		for i := 0; i < 10; i++ {
+			padded = append(padded, fmt.Sprintf("bc_fake_%d", i))
+		}
+		p := payloadWith(map[string]interface{}{
+			"builder-code": map[string]interface{}{
+				"info": map[string]interface{}{"s": padded},
+			},
+		})
+		r := server.ValidateExtensions(advertised, p)
+		if r.Valid || r.InvalidReason != "extension_echo_mismatch" || r.ExtensionKey != "builder-code" {
+			t.Fatalf("expected echo mismatch on builder-code for oversized echo, got %+v", r)
+		}
+	})
+
+	t.Run("passes when echoed array is exactly at the combined client+server budget", func(t *testing.T) {
+		advertised := map[string]interface{}{
+			"builder-code": map[string]interface{}{
+				"info": map[string]interface{}{"s": []interface{}{"bc_server"}},
+			},
+		}
+		atBudget := make([]interface{}, 0, 10)
+		atBudget = append(atBudget, "bc_server")
+		for i := 0; i < 9; i++ {
+			atBudget = append(atBudget, fmt.Sprintf("bc_client_%d", i))
+		}
+		p := payloadWith(map[string]interface{}{
+			"builder-code": map[string]interface{}{
+				"info": map[string]interface{}{"s": atBudget},
+			},
+		})
+		if r := server.ValidateExtensions(advertised, p); !r.Valid {
+			t.Fatalf("expected valid echo at the combined budget, got %+v", r)
 		}
 	})
 

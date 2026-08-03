@@ -107,6 +107,31 @@ def test_rejects_when_echoed_s_array_drops_advertised_element() -> None:
     assert result.extension_key == BUILDER_CODE
 
 
+def test_rejects_when_echoed_s_array_exceeds_the_combined_budget_even_as_a_superset() -> None:
+    # Regression test: a hand-crafted echo padding `s` past the combined
+    # client+server budget must be rejected outright rather than accepted and
+    # left to be silently truncated downstream (e.g. by a facilitator
+    # extension), which could crowd out the legitimately advertised entry.
+    server = x402ResourceServer()
+    required = _payment_required({BUILDER_CODE: {"info": {"s": ["bc_server"]}, "schema": 2}})
+    padded = ["bc_server"] + [f"bc_fake_{i}" for i in range(10)]
+    payload = _payment_payload({BUILDER_CODE: {"info": {"s": padded}, "schema": 2}})
+
+    result = server.validate_extensions(required, payload)
+    assert not result.valid
+    assert result.invalid_reason == ERR_EXTENSION_ECHO_MISMATCH
+    assert result.extension_key == BUILDER_CODE
+
+
+def test_passes_when_echoed_s_array_is_exactly_at_the_combined_budget() -> None:
+    server = x402ResourceServer()
+    required = _payment_required({BUILDER_CODE: {"info": {"s": ["bc_server"]}, "schema": 2}})
+    at_budget = ["bc_server"] + [f"bc_client_{i}" for i in range(9)]
+    payload = _payment_payload({BUILDER_CODE: {"info": {"s": at_budget}, "schema": 2}})
+
+    assert server.validate_extensions(required, payload).valid
+
+
 def test_passes_when_advertised_s_is_a_scalar_and_echo_is_an_array_containing_it() -> None:
     server = x402ResourceServer()
     required = _payment_required({BUILDER_CODE: {"info": {"s": "bc_server"}, "schema": 2}})

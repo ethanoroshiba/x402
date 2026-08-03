@@ -761,9 +761,13 @@ func (s *x402ResourceServer) ValidateExtensions(
 	// add fields; primitives must match exactly via DeepEqual). additive marks
 	// pairs whose array values may be extended by the echo (see
 	// additiveArrayInfoFields); all other array fields must match exactly.
+	// field names the object field this pair was read from, used to look up a
+	// combined-length cap for additive array fields (see
+	// additiveArrayMaxLengths); empty for the root pair.
 	type pair struct {
 		advertised, echoed interface{}
 		additive           bool
+		field              string
 	}
 
 	// normalize converts a server-declared value (which may be a typed struct)
@@ -809,8 +813,9 @@ func (s *x402ResourceServer) ValidateExtensions(
 		}
 
 		additiveFields := additiveArrayInfoFields[key]
+		maxLengths := additiveArrayMaxLengths[key]
 		mismatch := false
-		pending := []pair{{advertised, echoed, false}}
+		pending := []pair{{advertised, echoed, false, ""}}
 		for i := 0; i < len(pending) && !mismatch; i++ {
 			if pending[i].additive {
 				advSlice, advIsSlice := asSlice(pending[i].advertised)
@@ -827,6 +832,12 @@ func (s *x402ResourceServer) ValidateExtensions(
 						echoSlice, echoIsSlice = asScalarSingleton(pending[i].echoed)
 					}
 					if !advIsSlice || !echoIsSlice || !arrayContainsSubset(advSlice, echoSlice) {
+						mismatch = true
+					} else if maxLen := maxLengths[pending[i].field]; maxLen > 0 && len(echoSlice) > maxLen {
+						// A hand-crafted echo may pad an additive field past the
+						// combined reservation of the parties allowed to contribute
+						// to it; reject outright rather than let it through only to
+						// be silently truncated further downstream.
 						mismatch = true
 					}
 					continue
@@ -849,7 +860,7 @@ func (s *x402ResourceServer) ValidateExtensions(
 					break
 				}
 				if exists {
-					pending = append(pending, pair{advValue, echoValue, additiveFields[field]})
+					pending = append(pending, pair{advValue, echoValue, additiveFields[field], field})
 				}
 			}
 		}
@@ -875,6 +886,18 @@ func (s *x402ResourceServer) ValidateExtensions(
 // matching in both directions.
 var additiveArrayInfoFields = map[string]map[string]bool{
 	"builder-code": {"s": true},
+}
+
+// additiveArrayMaxLengths caps the combined echoed length of an additive array
+// field (see additiveArrayInfoFields) so a hand-crafted payload cannot pad the
+// field past the sum of every party's own reservation and later crowd out a
+// legitimately declared entry once truncated further downstream (e.g. by a
+// facilitator extension). A missing or zero entry means no cap is enforced
+// here. Core has no dependency on extension packages, so this value (builder-
+// code's MAX_CLIENT_SERVICE_CODES + MAX_SERVER_SERVICE_CODES) is duplicated
+// from go/extensions/buildercode/types.go and must be kept in sync by hand.
+var additiveArrayMaxLengths = map[string]map[string]int{
+	"builder-code": {"s": 10},
 }
 
 // dynamicInfoFields returns the dynamic `info` field names declared by the

@@ -140,11 +140,24 @@ _ADDITIVE_LIST_INFO_FIELDS: dict[str, set[str]] = {
     "builder-code": {"s"},
 }
 
+# Caps the combined echoed length of an additive list field (see
+# _ADDITIVE_LIST_INFO_FIELDS) so a hand-crafted payload cannot pad the field
+# past the sum of every party's own reservation and later crowd out a
+# legitimately declared entry once truncated further downstream (e.g. by a
+# facilitator extension). This package has no dependency on extension
+# packages, so this value (builder-code's MAX_CLIENT_SERVICE_CODES +
+# MAX_SERVER_SERVICE_CODES) is duplicated from
+# x402/extensions/builder_code/types.py and must be kept in sync by hand.
+_ADDITIVE_LIST_MAX_LENGTHS: dict[str, dict[str, int]] = {
+    "builder-code": {"s": 10},
+}
+
 
 def _object_contains_subset(
     expected: Any,
     actual: Any,
     additive_fields: set[str] | None = None,
+    max_lengths: dict[str, int] | None = None,
     field_key: str | None = None,
 ) -> bool:
     """Return whether ``actual`` contains every field/value from ``expected``.
@@ -153,8 +166,10 @@ def _object_contains_subset(
     ``additive_fields`` (e.g. builder-code's ``s``) and either side is a list,
     the list is additive: every element of ``expected`` must appear in
     ``actual``, and a bare scalar on either side is treated as a single-element
-    list. Every other list field must match exactly. Primitives must match
-    exactly.
+    list. When ``field_key`` also has an entry in ``max_lengths``, ``actual``
+    is rejected outright if it exceeds that combined length, rather than being
+    accepted and silently truncated downstream. Every other list field must
+    match exactly. Primitives must match exactly.
     """
     if (
         field_key is not None
@@ -165,6 +180,9 @@ def _object_contains_subset(
         expected_list = _to_comparable_list(expected)
         actual_list = _to_comparable_list(actual)
         if expected_list is None or actual_list is None:
+            return False
+        max_length = (max_lengths or {}).get(field_key)
+        if max_length is not None and len(actual_list) > max_length:
             return False
         return all(
             any(exp_item == act_item for act_item in actual_list) for exp_item in expected_list
@@ -178,7 +196,7 @@ def _object_contains_subset(
             if value is None:
                 continue
             return False
-        if not _object_contains_subset(value, actual[key], additive_fields, key):
+        if not _object_contains_subset(value, actual[key], additive_fields, max_lengths, key):
             return False
     return True
 
@@ -961,11 +979,13 @@ class x402ResourceServerBase:
             extension = self._extensions.get(key)
             dynamic_fields = getattr(extension, "dynamic_info_fields", None)
             additive_fields = _ADDITIVE_LIST_INFO_FIELDS.get(key)
+            max_lengths = _ADDITIVE_LIST_MAX_LENGTHS.get(key)
 
             if not _object_contains_subset(
                 _omit_fields(advertised_info, dynamic_fields),
                 _omit_fields(echoed_info, dynamic_fields),
                 additive_fields,
+                max_lengths,
             ):
                 return ExtensionValidationResult(
                     valid=False,

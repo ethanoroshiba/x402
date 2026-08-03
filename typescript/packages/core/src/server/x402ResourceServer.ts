@@ -16,6 +16,7 @@ import { Price, Network, ResourceServerExtension, ResourceServerExtensionHooks }
 import type { DeepReadonly } from "../types/readonly";
 import {
   ADDITIVE_ARRAY_INFO_FIELDS,
+  ADDITIVE_ARRAY_MAX_LENGTHS,
   deepEqual,
   findByNetworkAndScheme,
   toComparableArray,
@@ -1309,11 +1310,13 @@ export class x402ResourceServer {
 
       const dynamicFields = this.registeredExtensions.get(key)?.dynamicInfoFields;
       const additiveFields = ADDITIVE_ARRAY_INFO_FIELDS[key];
+      const maxLengths = ADDITIVE_ARRAY_MAX_LENGTHS[key];
       if (
         !extensionInfoMatchesAdvertised(
           omitFields(advertisedInfo, dynamicFields),
           omitFields(echoedInfo, dynamicFields),
           additiveFields,
+          maxLengths,
         )
       ) {
         return {
@@ -1699,14 +1702,16 @@ function omitFields(value: unknown, fields?: string[]): unknown {
  * @param advertised - Extension info advertised by the server.
  * @param echoed - Extension info echoed back by the client.
  * @param additiveFields - Field names whose array values may be extended by the echo.
+ * @param maxLengths - Combined-length caps for additive fields, keyed by field name.
  * @returns True when `echoed` contains every field from `advertised`.
  */
 function extensionInfoMatchesAdvertised(
   advertised: unknown,
   echoed: unknown,
   additiveFields?: ReadonlySet<string>,
+  maxLengths?: Record<string, number>,
 ): boolean {
-  return objectContainsSubset(advertised, echoed, additiveFields);
+  return objectContainsSubset(advertised, echoed, additiveFields, maxLengths);
 }
 
 /**
@@ -1745,13 +1750,16 @@ function paymentRequirementsMatchAccepted(
  * either side is an array, the array is additive: every element of `expected` must
  * appear in `actual` (extra elements allowed), and a bare scalar on either side is
  * treated as a single-element array so it compares against an array on the other
- * side. Every other array field - including payment-requirements `extra` matching,
- * which never passes `additiveFields` - must match exactly via `deepEqual`, same as
- * any other primitive.
+ * side. When `fieldKey` also has an entry in `maxLengths`, `actual` is rejected
+ * outright if it exceeds that combined length, rather than being accepted and
+ * silently truncated downstream. Every other array field - including
+ * payment-requirements `extra` matching, which never passes `additiveFields` - must
+ * match exactly via `deepEqual`, same as any other primitive.
  *
  * @param expected - Required subset.
  * @param actual - Candidate object.
  * @param additiveFields - Field names whose array values may be extended by `actual`.
+ * @param maxLengths - Combined-length caps for additive fields, keyed by field name.
  * @param fieldKey - Name of the field being compared at this recursion level, used to
  *   test membership in `additiveFields`; undefined at the root call.
  * @returns True when `actual` contains `expected`.
@@ -1760,6 +1768,7 @@ function objectContainsSubset(
   expected: unknown,
   actual: unknown,
   additiveFields?: ReadonlySet<string>,
+  maxLengths?: Record<string, number>,
   fieldKey?: string,
 ): boolean {
   if (
@@ -1770,6 +1779,10 @@ function objectContainsSubset(
     const expectedArray = toComparableArray(expected);
     const actualArray = toComparableArray(actual);
     if (!expectedArray || !actualArray) {
+      return false;
+    }
+    const maxLength = maxLengths?.[fieldKey];
+    if (maxLength !== undefined && actualArray.length > maxLength) {
       return false;
     }
     return expectedArray.every(expItem => actualArray.some(actItem => deepEqual(expItem, actItem)));
@@ -1789,7 +1802,7 @@ function objectContainsSubset(
     if (!hasActualKey) {
       return value === undefined;
     }
-    return objectContainsSubset(value, actualRecord[key], additiveFields, key);
+    return objectContainsSubset(value, actualRecord[key], additiveFields, maxLengths, key);
   });
 }
 

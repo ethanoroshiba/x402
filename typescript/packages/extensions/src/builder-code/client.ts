@@ -6,7 +6,7 @@
 
 import type { ClientExtension } from "@x402/core/client";
 import type { PaymentPayload, PaymentRequired } from "@x402/core/types";
-import { BUILDER_CODE, BUILDER_CODE_PATTERN, MAX_SERVICE_CODES } from "./types";
+import { BUILDER_CODE, BUILDER_CODE_PATTERN, MAX_CLIENT_SERVICE_CODES } from "./types";
 
 /**
  * Client extension that adds builder-code attribution to payment payloads.
@@ -34,9 +34,9 @@ export class BuilderCodeClientExtension implements ClientExtension {
    */
   constructor(serviceCodes: string | string[]) {
     const codes = Array.isArray(serviceCodes) ? serviceCodes : [serviceCodes];
-    if (codes.length > MAX_SERVICE_CODES) {
+    if (codes.length > MAX_CLIENT_SERVICE_CODES) {
       throw new Error(
-        `Too many service codes: ${codes.length} exceeds the maximum of ${MAX_SERVICE_CODES}.`,
+        `Too many service codes: ${codes.length} exceeds the maximum of ${MAX_CLIENT_SERVICE_CODES}.`,
       );
     }
     for (const code of codes) {

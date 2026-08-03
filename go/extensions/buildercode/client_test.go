@@ -2,6 +2,7 @@ package buildercode
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 	"testing"
 
@@ -23,7 +24,19 @@ func TestNewBuilderCodeClientExtensionRejectsTooManyCodes(t *testing.T) {
 			t.Fatal("expected panic for too many service codes")
 		}
 	}()
-	NewBuilderCodeClientExtension("a", "b", "c", "d", "e", "f")
+	codes := make([]string, MAX_CLIENT_SERVICE_CODES+1)
+	for i := range codes {
+		codes[i] = fmt.Sprintf("bc_%d", i)
+	}
+	NewBuilderCodeClientExtension(codes...)
+}
+
+func TestNewBuilderCodeClientExtensionAcceptsMaxCodes(t *testing.T) {
+	codes := make([]string, MAX_CLIENT_SERVICE_CODES)
+	for i := range codes {
+		codes[i] = fmt.Sprintf("bc_%d", i)
+	}
+	NewBuilderCodeClientExtension(codes...)
 }
 
 func TestClientExtensionKey(t *testing.T) {
@@ -131,5 +144,17 @@ func TestDeclareBuilderCodeExtensionRejectsTooManyServiceCodes(t *testing.T) {
 			t.Fatal("expected panic for too many service codes")
 		}
 	}()
-	DeclareBuilderCodeExtension(appCode, "a", "b", "c", "d", "e", "f")
+	codes := make([]string, MAX_SERVER_SERVICE_CODES+1)
+	for i := range codes {
+		codes[i] = fmt.Sprintf("bc_%d", i)
+	}
+	DeclareBuilderCodeExtension(appCode, codes...)
+}
+
+func TestDeclareBuilderCodeExtensionAcceptsMaxServiceCodes(t *testing.T) {
+	codes := make([]string, MAX_SERVER_SERVICE_CODES)
+	for i := range codes {
+		codes[i] = fmt.Sprintf("bc_%d", i)
+	}
+	DeclareBuilderCodeExtension(appCode, codes...)
 }

@@ -1863,6 +1863,48 @@ describe("x402ResourceServer", () => {
       });
     });
 
+    it("fails when echoed array exceeds the combined client+server budget even as a superset", () => {
+      // Regression test: a hand-crafted echo padding `s` past the combined
+      // budget must be rejected outright rather than accepted and left to be
+      // silently truncated downstream (e.g. by a facilitator extension),
+      // which could crowd out the legitimately advertised entry.
+      const server = new x402ResourceServer();
+      const paymentRequired = buildPaymentRequired({
+        extensions: {
+          "builder-code": { info: { s: ["bc_server"] } },
+        },
+      });
+      const padded = ["bc_server", ...Array.from({ length: 10 }, (_, i) => `bc_fake_${i}`)];
+      const payload = buildPaymentPayload({
+        extensions: {
+          "builder-code": { info: { s: padded } },
+        },
+      });
+
+      expect(server.validateExtensions(paymentRequired, payload)).toEqual({
+        valid: false,
+        invalidReason: "extension_echo_mismatch",
+        extensionKey: "builder-code",
+      });
+    });
+
+    it("passes when echoed array is exactly at the combined client+server budget", () => {
+      const server = new x402ResourceServer();
+      const paymentRequired = buildPaymentRequired({
+        extensions: {
+          "builder-code": { info: { s: ["bc_server"] } },
+        },
+      });
+      const atBudget = ["bc_server", ...Array.from({ length: 9 }, (_, i) => `bc_client_${i}`)];
+      const payload = buildPaymentPayload({
+        extensions: {
+          "builder-code": { info: { s: atBudget } },
+        },
+      });
+
+      expect(server.validateExtensions(paymentRequired, payload)).toEqual({ valid: true });
+    });
+
     it("passes when the advertised s is a scalar and the echo is an array containing it", () => {
       const server = new x402ResourceServer();
       const paymentRequired = buildPaymentRequired({

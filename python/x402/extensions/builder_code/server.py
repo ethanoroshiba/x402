@@ -4,7 +4,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from .types import BUILDER_CODE, BUILDER_CODE_PATTERN, MAX_SERVICE_CODES
+from .types import (
+    BUILDER_CODE,
+    BUILDER_CODE_PATTERN,
+    MAX_SERVER_SERVICE_CODES,
+    MAX_SERVICE_CODES,
+)
 
 BUILDER_CODE_SCHEMA: dict[str, Any] = {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -22,7 +27,7 @@ BUILDER_CODE_SCHEMA: dict[str, Any] = {
         },
         "s": {
             "type": "array",
-            "maxItems": 5,
+            "maxItems": MAX_SERVICE_CODES,
             "items": {
                 "type": "string",
                 "pattern": "^[a-z0-9_]{1,32}$",
@@ -50,7 +55,7 @@ def declare_builder_code_extension(
 
     Raises:
         ValueError: If ``app_code`` or any service code is not a valid builder
-            code, or if more than ``MAX_SERVICE_CODES`` are given.
+            code, or if more than ``MAX_SERVER_SERVICE_CODES`` are given.
     """
     if not BUILDER_CODE_PATTERN.match(app_code):
         raise ValueError(
@@ -61,9 +66,10 @@ def declare_builder_code_extension(
     info: dict[str, Any] = {"a": app_code}
     if service_codes is not None:
         codes = [service_codes] if isinstance(service_codes, str) else list(service_codes)
-        if len(codes) > MAX_SERVICE_CODES:
+        if len(codes) > MAX_SERVER_SERVICE_CODES:
             raise ValueError(
-                f"Too many service codes: {len(codes)} exceeds the maximum of {MAX_SERVICE_CODES}."
+                f"Too many service codes: {len(codes)} exceeds the maximum of "
+                f"{MAX_SERVER_SERVICE_CODES}."
             )
         for code in codes:
             if not BUILDER_CODE_PATTERN.match(code):

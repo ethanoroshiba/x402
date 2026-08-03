@@ -6,6 +6,7 @@ import type { ResourceServerExtension } from "@x402/core/types";
 import {
   BUILDER_CODE,
   BUILDER_CODE_PATTERN,
+  MAX_SERVER_SERVICE_CODES,
   MAX_SERVICE_CODES,
   type BuilderCodeExtensionData,
 } from "./types";
@@ -26,7 +27,7 @@ export const BUILDER_CODE_SCHEMA = {
     },
     s: {
       type: "array",
-      maxItems: 5,
+      maxItems: MAX_SERVICE_CODES,
       items: {
         type: "string",
         pattern: "^[a-z0-9_]{1,32}$",
@@ -63,9 +64,9 @@ export function declareBuilderCodeExtension(
   }
 
   const codes = serviceCodes === undefined ? [] : ([] as string[]).concat(serviceCodes);
-  if (codes.length > MAX_SERVICE_CODES) {
+  if (codes.length > MAX_SERVER_SERVICE_CODES) {
     throw new Error(
-      `Too many service codes: ${codes.length} exceeds the maximum of ${MAX_SERVICE_CODES}.`,
+      `Too many service codes: ${codes.length} exceeds the maximum of ${MAX_SERVER_SERVICE_CODES}.`,
     );
   }
   for (const code of codes) {

@@ -19,11 +19,11 @@ type BuilderCodeClientExtension struct {
 // clients (e.g. an MCP middleware) can attribute multiple participants.
 //
 // It panics when any serviceCode is not a valid builder code (1-32 lowercase
-// alphanumeric and underscore characters) or when more than MAX_SERVICE_CODES
-// are provided.
+// alphanumeric and underscore characters) or when more than
+// MAX_CLIENT_SERVICE_CODES are provided.
 func NewBuilderCodeClientExtension(serviceCodes ...string) *BuilderCodeClientExtension {
-	if len(serviceCodes) > MAX_SERVICE_CODES {
-		panic(fmt.Sprintf("too many service codes: %d exceeds the maximum of %d", len(serviceCodes), MAX_SERVICE_CODES))
+	if len(serviceCodes) > MAX_CLIENT_SERVICE_CODES {
+		panic(fmt.Sprintf("too many service codes: %d exceeds the maximum of %d", len(serviceCodes), MAX_CLIENT_SERVICE_CODES))
 	}
 	for _, code := range serviceCodes {
 		if !validateCode(code) {
