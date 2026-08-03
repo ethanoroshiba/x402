@@ -758,7 +758,8 @@ func (s *x402ResourceServer) ValidateExtensions(
 
 	// pair carries an advertised value and its client echo while a worklist walks
 	// nested objects: the echo must contain every advertised field (objects may
-	// add fields; arrays/primitives must match exactly via DeepEqual).
+	// add fields; arrays are additive — every advertised element must appear in
+	// the echo; primitives must match exactly via DeepEqual).
 	type pair struct{ advertised, echoed interface{} }
 
 	// normalize converts a server-declared value (which may be a typed struct)
@@ -806,6 +807,13 @@ func (s *x402ResourceServer) ValidateExtensions(
 		mismatch := false
 		pending := []pair{{advertised, echoed}}
 		for i := 0; i < len(pending) && !mismatch; i++ {
+			if advSlice, ok := asSlice(pending[i].advertised); ok {
+				echoSlice, ok := asSlice(pending[i].echoed)
+				if !ok || !arrayContainsSubset(advSlice, echoSlice) {
+					mismatch = true
+				}
+				continue
+			}
 			advertisedMap, isObject := pending[i].advertised.(map[string]interface{})
 			if !isObject {
 				mismatch = !DeepEqual(pending[i].advertised, pending[i].echoed)

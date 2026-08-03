@@ -136,17 +136,17 @@ The `w` (wallet) field is **not** set by the client. It is added by the facilita
 
 ## Builder Code Fields
 
-| Field | Set by      | When                               | Description                                              |
-| ----- | ----------- | ---------------------------------- | -------------------------------------------------------- |
-| `a`   | Application | Per-route middleware configuration | Identifies the application exposing the paid endpoint    |
-| `w`   | Facilitator | Settlement                         | Identifies the facilitator settling the payment on-chain |
-| `s`   | Client      | Payment payload construction       | Identifies the client or intermediary that participated  |
+| Field | Set by                | When                               | Description                                              |
+| ----- | --------------------- | ---------------------------------- | -------------------------------------------------------- |
+| `a`   | Application           | Per-route middleware configuration | Identifies the application exposing the paid endpoint    |
+| `w`   | Facilitator           | Settlement                         | Identifies the facilitator settling the payment on-chain |
+| `s`   | Client and/or server  | Payment payload construction       | Identifies participants in the payment path              |
 
 | Field | Server advertises `builder-code`? | Client behavior |
 | ----- | --------------------------------- | --------------- |
 | `a`   | Yes                               | Echo server value (via core merge) |
 | `a`   | No                                | MUST NOT set |
-| `s`   | Either                            | SHOULD attach when `BuilderCodeClientExtension` is registered |
+| `s`   | Either                            | SHOULD attach when `BuilderCodeClientExtension` is registered; when the server also declares `s`, core merge concatenates server then client codes (deduped) |
 
 ---
 

@@ -66,6 +66,31 @@ describe("Builder Code Integration Tests", () => {
     });
   });
 
+  it("merges server and client service codes when both declare s", async () => {
+    const accepts = [buildCashPaymentRequirements("merchant@example.com", "USD", "1")];
+    const resource = {
+      url: "https://example.com/api/weather",
+      description: "Weather API",
+      mimeType: "application/json",
+    };
+    const paymentRequired = await server.createPaymentRequiredResponse(accepts, resource);
+    const declared = declareBuilderCodeExtension(APP);
+    paymentRequired.extensions = {
+      [BUILDER_CODE]: {
+        ...declared,
+        info: { ...declared.info, s: ["bc_server_sdk"] },
+      },
+    };
+
+    const paymentPayload = await client.createPaymentPayload(paymentRequired);
+
+    expect(paymentPayload.extensions?.[BUILDER_CODE]).toEqual({
+      info: { a: APP, s: ["bc_server_sdk", SERVICE] },
+      schema: expect.any(Object),
+    });
+    expect(server.validateExtensions(paymentRequired, paymentPayload)).toEqual({ valid: true });
+  });
+
   it("attaches service codes when builder-code is absent from payment required", async () => {
     const accepts = [buildCashPaymentRequirements("merchant@example.com", "USD", "1")];
     const resource = {

@@ -1064,4 +1064,40 @@ func TestValidateExtensions(t *testing.T) {
 			t.Fatalf("expected echo mismatch on builder, got %+v", r)
 		}
 	})
+
+	t.Run("passes when echoed array is a superset of advertised array", func(t *testing.T) {
+		advertised := map[string]interface{}{
+			"builder-code": map[string]interface{}{
+				"info": map[string]interface{}{"a": "bc_app", "s": []interface{}{"bc_server"}},
+			},
+		}
+		p := payloadWith(map[string]interface{}{
+			"builder-code": map[string]interface{}{
+				"info": map[string]interface{}{
+					"a": "bc_app",
+					"s": []interface{}{"bc_server", "bc_client"},
+				},
+			},
+		})
+		if r := server.ValidateExtensions(advertised, p); !r.Valid {
+			t.Fatalf("expected valid additive s merge, got %+v", r)
+		}
+	})
+
+	t.Run("fails when echoed array drops an advertised element", func(t *testing.T) {
+		advertised := map[string]interface{}{
+			"builder-code": map[string]interface{}{
+				"info": map[string]interface{}{"s": []interface{}{"bc_server"}},
+			},
+		}
+		p := payloadWith(map[string]interface{}{
+			"builder-code": map[string]interface{}{
+				"info": map[string]interface{}{"s": []interface{}{"bc_client"}},
+			},
+		})
+		r := server.ValidateExtensions(advertised, p)
+		if r.Valid || r.InvalidReason != "extension_echo_mismatch" || r.ExtensionKey != "builder-code" {
+			t.Fatalf("expected echo mismatch on builder-code, got %+v", r)
+		}
+	})
 }

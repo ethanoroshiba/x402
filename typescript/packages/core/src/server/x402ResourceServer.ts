@@ -1724,15 +1724,24 @@ function paymentRequirementsMatchAccepted(
 
 /**
  * Recursively checks that `actual` contains every field and value from `expected`.
- * Object values may contain additional fields; arrays and primitives must match exactly.
+ * Object values may contain additional fields. Arrays are additive: every element
+ * of `expected` must appear in `actual` (extra elements allowed). Primitives must
+ * match exactly.
  *
  * @param expected - Required subset.
  * @param actual - Candidate object.
  * @returns True when `actual` contains `expected`.
  */
 function objectContainsSubset(expected: unknown, actual: unknown): boolean {
-  if (expected === null || typeof expected !== "object" || Array.isArray(expected)) {
+  if (expected === null || typeof expected !== "object") {
     return deepEqual(expected, actual);
+  }
+
+  if (Array.isArray(expected)) {
+    if (!Array.isArray(actual)) {
+      return false;
+    }
+    return expected.every(expItem => actual.some(actItem => deepEqual(expItem, actItem)));
   }
 
   if (actual === null || typeof actual !== "object" || Array.isArray(actual)) {

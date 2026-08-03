@@ -574,9 +574,11 @@ func asStringMap(v interface{}) (map[string]interface{}, bool) {
 }
 
 // mergeExtensions merges server-declared extensions with client/scheme-provided
-// extensions, always preserving server-declared fields. For keys present on both
-// sides whose values are objects, server fields win and only client fields the
-// server did not declare are added (recursing into nested objects); for any
+// extensions, always preserving server-declared scalar fields. For keys present
+// on both sides whose values are objects, server fields win and only client
+// fields the server did not declare are added (recursing into nested objects).
+// When both sides declare the same array field (e.g. builder-code `s`), values
+// are concatenated with server entries first and duplicates removed. For any
 // other key the client value is used.
 func mergeExtensions(server, client map[string]interface{}) map[string]interface{} {
 	if client == nil {
@@ -600,7 +602,8 @@ func mergeExtensions(server, client map[string]interface{}) map[string]interface
 		}
 
 		// Deep-merge into a copy of the server object, preserving server fields and
-		// only adding client fields the server did not declare.
+		// only adding client fields the server did not declare. Conflicting arrays
+		// are concatenated (server first) with duplicates removed.
 		extensionValue := make(map[string]interface{}, len(serverMap))
 		for k, v := range serverMap {
 			extensionValue[k] = v
@@ -621,6 +624,12 @@ func mergeExtensions(server, client map[string]interface{}) map[string]interface
 					pending = append(pending, mergePair{target: nested, source: clientFieldMap})
 					continue
 				}
+				serverSlice, ssOk := asSlice(target[fieldKey])
+				clientSlice, csOk := asSlice(clientFieldVal)
+				if ssOk && csOk {
+					target[fieldKey] = mergeSlicesUnique(serverSlice, clientSlice)
+					continue
+				}
 				if _, exists := target[fieldKey]; !exists {
 					target[fieldKey] = clientFieldVal
 				}
@@ -630,4 +639,60 @@ func mergeExtensions(server, client map[string]interface{}) map[string]interface
 		merged[key] = extensionValue
 	}
 	return merged
+}
+
+// asSlice returns v as a []interface{} so array fields can participate in merge
+// and echo subset checks. Supports []interface{} (JSON shape) and []string
+// (common when Go code builds extension maps directly).
+func asSlice(v interface{}) ([]interface{}, bool) {
+	switch s := v.(type) {
+	case []interface{}:
+		return s, true
+	case []string:
+		out := make([]interface{}, len(s))
+		for i, x := range s {
+			out[i] = x
+		}
+		return out, true
+	default:
+		return nil, false
+	}
+}
+
+// mergeSlicesUnique concatenates server then client, dropping client items that
+// already appear in the result (DeepEqual).
+func mergeSlicesUnique(server, client []interface{}) []interface{} {
+	merged := make([]interface{}, len(server), len(server)+len(client))
+	copy(merged, server)
+	for _, item := range client {
+		found := false
+		for _, existing := range merged {
+			if DeepEqual(existing, item) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			merged = append(merged, item)
+		}
+	}
+	return merged
+}
+
+// arrayContainsSubset reports whether every element of expected appears in
+// actual (DeepEqual membership). Extra actual elements are allowed.
+func arrayContainsSubset(expected, actual []interface{}) bool {
+	for _, exp := range expected {
+		found := false
+		for _, act := range actual {
+			if DeepEqual(exp, act) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+	return true
 }

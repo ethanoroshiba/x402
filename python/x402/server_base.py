@@ -118,8 +118,13 @@ def _omit_fields(value: Any, fields: list[str] | None) -> Any:
 def _object_contains_subset(expected: Any, actual: Any) -> bool:
     """Return whether ``actual`` contains every field/value from ``expected``.
 
-    Object values may add fields; arrays and primitives must match exactly.
+    Object values may add fields. Lists are additive: every element of
+    ``expected`` must appear in ``actual``. Primitives must match exactly.
     """
+    if isinstance(expected, list):
+        if not isinstance(actual, list):
+            return False
+        return all(any(exp_item == act_item for act_item in actual) for exp_item in expected)
     if not isinstance(expected, dict):
         return expected == actual
     if not isinstance(actual, dict):

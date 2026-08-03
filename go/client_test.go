@@ -643,4 +643,57 @@ func TestMergeExtensions(t *testing.T) {
 			t.Fatalf("client object should replace non-object server value, got %T", merged["k"])
 		}
 	})
+
+	t.Run("merges conflicting array fields instead of replacing", func(t *testing.T) {
+		server := map[string]interface{}{
+			"builder-code": map[string]interface{}{
+				"info": map[string]interface{}{
+					"a": "bc_app",
+					"s": []interface{}{"bc_server", "bc_shared"},
+				},
+				"schema": map[string]interface{}{"type": "object"},
+			},
+		}
+		client := map[string]interface{}{
+			"builder-code": map[string]interface{}{
+				"info": map[string]interface{}{
+					"s": []interface{}{"bc_shared", "bc_client"},
+				},
+			},
+		}
+
+		merged := mergeExtensions(server, client)
+		info := merged["builder-code"].(map[string]interface{})["info"].(map[string]interface{})
+		got, ok := asSlice(info["s"])
+		if !ok {
+			t.Fatalf("expected merged s array, got %T", info["s"])
+		}
+		want := []interface{}{"bc_server", "bc_shared", "bc_client"}
+		if !DeepEqual(got, want) {
+			t.Fatalf("expected s=%v, got %v", want, got)
+		}
+		if info["a"] != "bc_app" {
+			t.Fatalf("server a should be preserved, got %v", info["a"])
+		}
+	})
+
+	t.Run("merges []string array fields from typed Go maps", func(t *testing.T) {
+		server := map[string]interface{}{
+			"builder-code": map[string]interface{}{
+				"info": map[string]interface{}{"s": []string{"bc_server"}},
+			},
+		}
+		client := map[string]interface{}{
+			"builder-code": map[string]interface{}{
+				"info": map[string]interface{}{"s": []string{"bc_client"}},
+			},
+		}
+
+		merged := mergeExtensions(server, client)
+		info := merged["builder-code"].(map[string]interface{})["info"].(map[string]interface{})
+		got, ok := asSlice(info["s"])
+		if !ok || !DeepEqual(got, []interface{}{"bc_server", "bc_client"}) {
+			t.Fatalf("expected [bc_server bc_client], got %v", info["s"])
+		}
+	})
 }

@@ -53,7 +53,9 @@ def _merge_extensions(
     server's declared extension entry (e.g. ``info.description`` and the
     ``schema`` object) is preserved, while the client overlays only NEW fields
     it populates (e.g. the signed ``from``/``signature``/... permit data). For
-    conflicting leaf fields the server value wins.
+    conflicting scalar leaf fields the server value wins. When both sides
+    declare the same list field (e.g. builder-code ``s``), values are
+    concatenated with server entries first and duplicates removed.
 
     Without this, a shallow ``{**server, **client}`` replace would drop the
     server's ``schema`` from gas-sponsoring extensions, which strict Go/TS
@@ -84,18 +86,30 @@ def _merge_extensions(
     return merged
 
 
+def _merge_lists_unique(server: list[Any], client: list[Any]) -> list[Any]:
+    """Concatenate ``server`` then ``client``, dropping client duplicates."""
+    merged = list(server)
+    for item in client:
+        if item not in merged:
+            merged.append(item)
+    return merged
+
+
 def _deep_overlay(target: dict[str, Any], source: dict[str, Any]) -> dict[str, Any]:
     """Recursively overlay ``source`` onto a copy of ``target``.
 
-    Nested dicts are merged recursively; for leaf fields the existing
-    ``target`` (server) value is kept and only missing keys are added from
-    ``source`` (client). Matches the TS ``mergeExtensions`` inner loop.
+    Nested dicts are merged recursively; conflicting lists are concatenated
+    (server first, deduped); for other leaf fields the existing ``target``
+    (server) value is kept and only missing keys are added from ``source``
+    (client). Matches the TS ``mergeExtensions`` inner loop.
     """
     result: dict[str, Any] = {**target}
     for field_key, source_value in source.items():
         target_value = result.get(field_key)
         if isinstance(target_value, dict) and isinstance(source_value, dict):
             result[field_key] = _deep_overlay(target_value, source_value)
+        elif isinstance(target_value, list) and isinstance(source_value, list):
+            result[field_key] = _merge_lists_unique(target_value, source_value)
         elif field_key not in result:
             result[field_key] = source_value
     return result

@@ -2,7 +2,7 @@ import { x402Version } from "..";
 import { SchemeNetworkClient } from "../types/mechanisms";
 import { PaymentPayload, PaymentRequirements } from "../types/payments";
 import { Network, PaymentRequired, SettleResponse } from "../types";
-import { findByNetworkAndScheme, findSchemesByNetwork } from "../utils";
+import { deepEqual, findByNetworkAndScheme, findSchemesByNetwork } from "../utils";
 
 /**
  * Client Hook Context Interfaces
@@ -486,7 +486,9 @@ export class x402Client {
 
   /**
    * Merges server-declared extensions with client extension echoes.
-   * Client extension data may add fields, but server-declared fields remain intact.
+   * Client extension data may add fields, but server-declared scalar fields remain intact.
+   * When both sides declare the same array field (e.g. builder-code `s`), values are
+   * concatenated with server entries first and duplicates removed.
    *
    * @param serverExtensions - Extensions declared by the server in the 402 response
    * @param clientExtensions - Extensions provided by the client or scheme
@@ -535,6 +537,11 @@ export class x402Client {
               target: nestedValue,
               source: clientFieldValue as Record<string, unknown>,
             });
+            continue;
+          }
+
+          if (Array.isArray(serverFieldValue) && Array.isArray(clientFieldValue)) {
+            item.target[fieldKey] = mergeArraysUnique(serverFieldValue, clientFieldValue);
             continue;
           }
 
@@ -780,4 +787,22 @@ export class x402Client {
         return "onPaymentResponse";
     }
   }
+}
+
+/**
+ * Concatenates two arrays, keeping server entries first and dropping client
+ * duplicates already present (deep equality).
+ *
+ * @param server - Server-declared array values
+ * @param client - Client-provided array values
+ * @returns Deduplicated concatenation
+ */
+function mergeArraysUnique(server: unknown[], client: unknown[]): unknown[] {
+  const merged = [...server];
+  for (const item of client) {
+    if (!merged.some(existing => deepEqual(existing, item))) {
+      merged.push(item);
+    }
+  }
+  return merged;
 }
