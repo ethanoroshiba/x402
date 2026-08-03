@@ -36,6 +36,7 @@ from .schemas import (
     find_schemes_by_network,
 )
 from .schemas.extensions import ClientExtension
+from .server_base import _ADDITIVE_LIST_INFO_FIELDS
 
 # ============================================================================
 # Extension merging
@@ -53,11 +54,12 @@ def _merge_extensions(
     server's declared extension entry (e.g. ``info.description`` and the
     ``schema`` object) is preserved, while the client overlays only NEW fields
     it populates (e.g. the signed ``from``/``signature``/... permit data). For
-    conflicting scalar leaf fields the server value wins. When both sides
-    declare the same list field (e.g. builder-code ``s``), values are
-    concatenated with client entries first (so a downstream length cap trims
-    server entries rather than the client's) and duplicates removed; a bare
-    scalar on either side is treated as a single-element list.
+    conflicting leaf fields the server value wins, except fields listed in
+    ``_ADDITIVE_LIST_INFO_FIELDS`` (e.g. builder-code ``s``): a conflicting
+    list there is concatenated with client entries first (so a downstream
+    length cap trims server entries rather than the client's) and duplicates
+    removed, with a bare scalar on either side treated as a single-element
+    list.
 
     Without this, a shallow ``{**server, **client}`` replace would drop the
     server's ``schema`` from gas-sponsoring extensions, which strict Go/TS
@@ -84,7 +86,8 @@ def _merge_extensions(
         if not _is_mergeable(server_value) or not _is_mergeable(client_value):
             merged[key] = client_value
             continue
-        merged[key] = _deep_overlay(server_value, client_value)
+        additive_fields = _ADDITIVE_LIST_INFO_FIELDS.get(key)
+        merged[key] = _deep_overlay(server_value, client_value, additive_fields)
     return merged
 
 
@@ -113,21 +116,31 @@ def _scalar_to_list(value: Any) -> list[Any] | None:
     return [value]
 
 
-def _deep_overlay(target: dict[str, Any], source: dict[str, Any]) -> dict[str, Any]:
+def _deep_overlay(
+    target: dict[str, Any],
+    source: dict[str, Any],
+    additive_fields: set[str] | None = None,
+) -> dict[str, Any]:
     """Recursively overlay ``source`` onto a copy of ``target``.
 
-    Nested dicts are merged recursively; conflicting lists are concatenated
-    (client first, deduped), with a bare scalar on either side treated as a
-    single-element list; for other leaf fields the existing ``target``
-    (server) value is kept and only missing keys are added from ``source``
-    (client). Matches the TS ``mergeExtensions`` inner loop.
+    Nested dicts are merged recursively. When ``field_key`` is in
+    ``additive_fields`` (e.g. builder-code's ``s``) and either side is a
+    list, conflicting lists are concatenated (client first, deduped), with a
+    bare scalar on either side treated as a single-element list. For every
+    other leaf field, including non-additive list conflicts, the existing
+    ``target`` (server) value is kept and only missing keys are added from
+    ``source`` (client). Matches the TS ``mergeExtensions`` inner loop.
     """
     result: dict[str, Any] = {**target}
     for field_key, source_value in source.items():
         target_value = result.get(field_key)
         if isinstance(target_value, dict) and isinstance(source_value, dict):
-            result[field_key] = _deep_overlay(target_value, source_value)
-        elif isinstance(target_value, list) or isinstance(source_value, list):
+            result[field_key] = _deep_overlay(target_value, source_value, additive_fields)
+        elif (
+            additive_fields
+            and field_key in additive_fields
+            and (isinstance(target_value, list) or isinstance(source_value, list))
+        ):
             target_list = (
                 target_value if isinstance(target_value, list) else _scalar_to_list(target_value)
             )

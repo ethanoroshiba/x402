@@ -130,10 +130,12 @@ def _to_comparable_list(value: Any) -> list[Any] | None:
     return [value]
 
 
-# Extension info fields, keyed by extension key, where the client-echoed list
-# may safely add entries beyond what the server advertised. Scoped narrowly per
-# extension + field so unrelated extensions (e.g. sign-in-with-x's "resources")
-# keep exact list matching.
+# Extension info fields, keyed by extension key, where a conflicting list value
+# declared by both server and client is additive rather than exclusive:
+# client_base._merge_extensions concatenates both sides (client first, deduped)
+# and validate_extensions accepts any echo that is a superset of the advertised
+# value. Scoped narrowly per extension + field so unrelated extensions (e.g.
+# sign-in-with-x's "resources") keep exact list matching in both directions.
 _ADDITIVE_LIST_INFO_FIELDS: dict[str, set[str]] = {
     "builder-code": {"s"},
 }

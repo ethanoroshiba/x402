@@ -867,9 +867,12 @@ func (s *x402ResourceServer) ValidateExtensions(
 }
 
 // additiveArrayInfoFields lists extension info fields, keyed by extension key,
-// where the client-echoed array may safely add entries beyond what the server
-// advertised. Scoped narrowly per extension + field so unrelated extensions
-// (e.g. sign-in-with-x's "resources") keep exact array matching.
+// where a conflicting array value declared by both server and client is
+// additive rather than exclusive: mergeExtensions concatenates both sides
+// (client first, deduped) and ValidateExtensions accepts any echo that is a
+// superset of the advertised value. Scoped narrowly per extension + field so
+// unrelated extensions (e.g. sign-in-with-x's "resources") keep exact array
+// matching in both directions.
 var additiveArrayInfoFields = map[string]map[string]bool{
 	"builder-code": {"s": true},
 }

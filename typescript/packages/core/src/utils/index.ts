@@ -259,3 +259,16 @@ export function toComparableArray(value: unknown): unknown[] | undefined {
   }
   return [value];
 }
+
+/**
+ * Extension info fields, keyed by extension key, where a conflicting array
+ * value declared by both server and client is additive rather than exclusive:
+ * the client's merge concatenates both sides (client first, deduped, see
+ * `mergeArraysUnique`), and the server's echo validation accepts any echo that
+ * is a superset of the advertised value. Scoped narrowly per field (rather
+ * than making all array fields additive) so unrelated extensions - e.g.
+ * sign-in-with-x's `resources` - keep exact array matching in both directions.
+ */
+export const ADDITIVE_ARRAY_INFO_FIELDS: Record<string, ReadonlySet<string>> = {
+  "builder-code": new Set(["s"]),
+};

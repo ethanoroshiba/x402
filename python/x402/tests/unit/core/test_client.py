@@ -516,6 +516,36 @@ class TestRegisterExtension:
         }
 
     @pytest.mark.asyncio
+    async def test_keeps_the_server_array_for_a_non_additive_extension_field(self):
+        # Array concatenation is scoped to _ADDITIVE_LIST_INFO_FIELDS (builder-code's
+        # "s"); other extensions' conflicting list fields must keep the server's
+        # value, matching x402ResourceServer's exact-match requirement for them.
+        class Ext:
+            key = "sign-in-with-x"
+
+            def enrich_payment_payload(self, payload, payment_required):
+                extensions = dict(payload.extensions or {})
+                extensions["sign-in-with-x"] = {"info": {"resources": ["https://evil.example.com"]}}
+                return payload.model_copy(update={"extensions": extensions})
+
+        client = x402Client()
+        client.register("eip155:8453", MockSchemeClient("exact"))
+        client.register_extension(Ext())
+
+        payment_required = PaymentRequired(
+            x402_version=2,
+            accepts=[_make_payment_requirements()],
+            extensions={
+                "sign-in-with-x": {"info": {"resources": ["https://api.example.com/data"]}}
+            },
+        )
+        payload = await client.create_payment_payload(payment_required)
+        assert payload.extensions is not None
+        assert payload.extensions["sign-in-with-x"] == {
+            "info": {"resources": ["https://api.example.com/data"]}
+        }
+
+    @pytest.mark.asyncio
     async def test_register_extension_enriches_without_server_declaration(self):
         class Ext:
             key = "clientOwnedExtension"

@@ -14,7 +14,12 @@ import {
 import { SchemeNetworkServer, SchemePaymentRequiredContext } from "../types/mechanisms";
 import { Price, Network, ResourceServerExtension, ResourceServerExtensionHooks } from "../types";
 import type { DeepReadonly } from "../types/readonly";
-import { deepEqual, findByNetworkAndScheme, toComparableArray } from "../utils";
+import {
+  ADDITIVE_ARRAY_INFO_FIELDS,
+  deepEqual,
+  findByNetworkAndScheme,
+  toComparableArray,
+} from "../utils";
 import {
   assertAcceptsAllowlistedAfterExtensionEnrich,
   assertAcceptsAdditiveExtraAfterSchemeEnrich,
@@ -1684,16 +1689,6 @@ function omitFields(value: unknown, fields?: string[]): unknown {
   }
   return copy;
 }
-
-/**
- * Extension info fields where the client-echoed array may safely add entries
- * beyond what the server advertised, keyed by extension key. Scoped narrowly
- * per field (rather than making all array fields additive) so unrelated
- * extensions - e.g. sign-in-with-x's `resources` - keep exact array matching.
- */
-const ADDITIVE_ARRAY_INFO_FIELDS: Record<string, ReadonlySet<string>> = {
-  "builder-code": new Set(["s"]),
-};
 
 /**
  * Returns whether a client-echoed extension payload preserves the server advertisement.

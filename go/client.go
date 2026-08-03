@@ -575,14 +575,15 @@ func asStringMap(v interface{}) (map[string]interface{}, bool) {
 }
 
 // mergeExtensions merges server-declared extensions with client/scheme-provided
-// extensions, always preserving server-declared scalar fields. For keys present
-// on both sides whose values are objects, server fields win and only client
+// extensions, always preserving server-declared fields. For keys present on
+// both sides whose values are objects, server fields win and only client
 // fields the server did not declare are added (recursing into nested objects).
-// When both sides declare the same array field (e.g. builder-code `s`), values
-// are concatenated with client entries first (so a downstream length cap trims
-// server entries rather than the client's) and duplicates removed; a scalar on
-// either side is treated as a single-element array. For any other key the client
-// value is used.
+// For fields listed in additiveArrayInfoFields (e.g. builder-code `s`), a
+// conflicting array is concatenated with client entries first (so a downstream
+// length cap trims server entries rather than the client's) and duplicates
+// removed; a scalar on either side is treated as a single-element array. Every
+// other conflicting array keeps the server's value, same as any other scalar.
+// For any other key the client value is used.
 func mergeExtensions(server, client map[string]interface{}) map[string]interface{} {
 	if client == nil {
 		return server
@@ -606,7 +607,10 @@ func mergeExtensions(server, client map[string]interface{}) map[string]interface
 
 		// Deep-merge into a copy of the server object, preserving server fields and
 		// only adding client fields the server did not declare. Conflicting arrays
-		// are concatenated (client first) with duplicates removed.
+		// in an additive field (see additiveArrayInfoFields) are concatenated
+		// (client first) with duplicates removed; every other conflicting array
+		// keeps the server's value.
+		additiveFields := additiveArrayInfoFields[key]
 		extensionValue := make(map[string]interface{}, len(serverMap))
 		for k, v := range serverMap {
 			extensionValue[k] = v
@@ -627,19 +631,21 @@ func mergeExtensions(server, client map[string]interface{}) map[string]interface
 					pending = append(pending, mergePair{target: nested, source: clientFieldMap})
 					continue
 				}
-				serverSlice, ssOk := asSlice(target[fieldKey])
-				clientSlice, csOk := asSlice(clientFieldVal)
-				// A scalar on one side (e.g. builder-code `s` sent as a bare string)
-				// merges as a single-element array against an array on the other side.
-				if !ssOk && csOk {
-					serverSlice, ssOk = asScalarSingleton(target[fieldKey])
-				}
-				if !csOk && ssOk {
-					clientSlice, csOk = asScalarSingleton(clientFieldVal)
-				}
-				if ssOk && csOk {
-					target[fieldKey] = mergeSlicesUnique(clientSlice, serverSlice)
-					continue
+				if additiveFields[fieldKey] {
+					serverSlice, ssOk := asSlice(target[fieldKey])
+					clientSlice, csOk := asSlice(clientFieldVal)
+					// A scalar on one side (e.g. builder-code `s` sent as a bare string)
+					// merges as a single-element array against an array on the other side.
+					if !ssOk && csOk {
+						serverSlice, ssOk = asScalarSingleton(target[fieldKey])
+					}
+					if !csOk && ssOk {
+						clientSlice, csOk = asScalarSingleton(clientFieldVal)
+					}
+					if ssOk && csOk {
+						target[fieldKey] = mergeSlicesUnique(clientSlice, serverSlice)
+						continue
+					}
 				}
 				if _, exists := target[fieldKey]; !exists {
 					target[fieldKey] = clientFieldVal

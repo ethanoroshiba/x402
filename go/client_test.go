@@ -699,23 +699,23 @@ func TestMergeExtensions(t *testing.T) {
 
 	t.Run("merges []map[string]interface{} array fields via JSON round-trip", func(t *testing.T) {
 		server := map[string]interface{}{
-			"ext": map[string]interface{}{
+			"builder-code": map[string]interface{}{
 				"info": map[string]interface{}{
-					"items": []interface{}{map[string]interface{}{"a": 1.0}},
+					"s": []interface{}{map[string]interface{}{"a": 1.0}},
 				},
 			},
 		}
 		client := map[string]interface{}{
-			"ext": map[string]interface{}{
+			"builder-code": map[string]interface{}{
 				"info": map[string]interface{}{
-					"items": []map[string]interface{}{{"a": 1.0}, {"b": 2.0}},
+					"s": []map[string]interface{}{{"a": 1.0}, {"b": 2.0}},
 				},
 			},
 		}
 
 		merged := mergeExtensions(server, client)
-		info := merged["ext"].(map[string]interface{})["info"].(map[string]interface{})
-		got, ok := asSlice(info["items"])
+		info := merged["builder-code"].(map[string]interface{})["info"].(map[string]interface{})
+		got, ok := asSlice(info["s"])
 		want := []interface{}{
 			map[string]interface{}{"a": 1.0},
 			map[string]interface{}{"b": 2.0},
@@ -762,6 +762,28 @@ func TestMergeExtensions(t *testing.T) {
 		got, ok := asSlice(info["s"])
 		if !ok || !DeepEqual(got, []interface{}{"bc_client", "bc_server"}) {
 			t.Fatalf("expected [bc_client bc_server], got %v", info["s"])
+		}
+	})
+
+	t.Run("keeps the server array for a non-additive extension field instead of concatenating", func(t *testing.T) {
+		// Array concatenation is scoped to additiveArrayInfoFields (builder-code's
+		// "s"); other extensions' conflicting array fields must keep the server's
+		// value, matching ValidateExtensions' exact-match requirement for them.
+		server := map[string]interface{}{
+			"sign-in-with-x": map[string]interface{}{
+				"info": map[string]interface{}{"resources": []interface{}{"https://api.example.com/data"}},
+			},
+		}
+		client := map[string]interface{}{
+			"sign-in-with-x": map[string]interface{}{
+				"info": map[string]interface{}{"resources": []interface{}{"https://evil.example.com"}},
+			},
+		}
+
+		merged := mergeExtensions(server, client)
+		info := merged["sign-in-with-x"].(map[string]interface{})["info"].(map[string]interface{})
+		if !DeepEqual(info["resources"], []interface{}{"https://api.example.com/data"}) {
+			t.Fatalf("expected server resources to be preserved, got %v", info["resources"])
 		}
 	})
 }
