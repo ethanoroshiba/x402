@@ -130,14 +130,36 @@ def _to_comparable_list(value: Any) -> list[Any] | None:
     return [value]
 
 
-def _object_contains_subset(expected: Any, actual: Any) -> bool:
+# Extension info fields, keyed by extension key, where the client-echoed list
+# may safely add entries beyond what the server advertised. Scoped narrowly per
+# extension + field so unrelated extensions (e.g. sign-in-with-x's "resources")
+# keep exact list matching.
+_ADDITIVE_LIST_INFO_FIELDS: dict[str, set[str]] = {
+    "builder-code": {"s"},
+}
+
+
+def _object_contains_subset(
+    expected: Any,
+    actual: Any,
+    additive_fields: set[str] | None = None,
+    field_key: str | None = None,
+) -> bool:
     """Return whether ``actual`` contains every field/value from ``expected``.
 
-    Object values may add fields. Lists are additive: every element of
-    ``expected`` must appear in ``actual``, and a bare scalar on either side is
-    treated as a single-element list. Primitives must match exactly.
+    Object values may add fields. When ``field_key`` names a field in
+    ``additive_fields`` (e.g. builder-code's ``s``) and either side is a list,
+    the list is additive: every element of ``expected`` must appear in
+    ``actual``, and a bare scalar on either side is treated as a single-element
+    list. Every other list field must match exactly. Primitives must match
+    exactly.
     """
-    if isinstance(expected, list) or isinstance(actual, list):
+    if (
+        field_key is not None
+        and additive_fields
+        and field_key in additive_fields
+        and (isinstance(expected, list) or isinstance(actual, list))
+    ):
         expected_list = _to_comparable_list(expected)
         actual_list = _to_comparable_list(actual)
         if expected_list is None or actual_list is None:
@@ -154,7 +176,7 @@ def _object_contains_subset(expected: Any, actual: Any) -> bool:
             if value is None:
                 continue
             return False
-        if not _object_contains_subset(value, actual[key]):
+        if not _object_contains_subset(value, actual[key], additive_fields, key):
             return False
     return True
 
@@ -936,10 +958,12 @@ class x402ResourceServerBase:
 
             extension = self._extensions.get(key)
             dynamic_fields = getattr(extension, "dynamic_info_fields", None)
+            additive_fields = _ADDITIVE_LIST_INFO_FIELDS.get(key)
 
             if not _object_contains_subset(
                 _omit_fields(advertised_info, dynamic_fields),
                 _omit_fields(echoed_info, dynamic_fields),
+                additive_fields,
             ):
                 return ExtensionValidationResult(
                     valid=False,

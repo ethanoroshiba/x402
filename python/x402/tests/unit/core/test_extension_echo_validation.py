@@ -125,6 +125,29 @@ def test_passes_when_advertised_s_is_an_array_and_echo_is_a_matching_scalar() ->
     assert server.validate_extensions(required, payload).valid
 
 
+def test_rejects_when_non_builder_code_extension_array_field_gains_an_echoed_element() -> None:
+    # Additive-array echo matching is scoped to builder-code's `s`; other
+    # extensions' array fields (e.g. sign-in-with-x's `resources`) must still
+    # match exactly so clients cannot smuggle extra values into the echo.
+    server = x402ResourceServer()
+    required = _payment_required(
+        {"sign-in-with-x": {"info": {"resources": ["https://api.example.com/data"]}, "schema": 2}}
+    )
+    payload = _payment_payload(
+        {
+            "sign-in-with-x": {
+                "info": {"resources": ["https://api.example.com/data", "https://evil.example.com"]},
+                "schema": 2,
+            }
+        }
+    )
+
+    result = server.validate_extensions(required, payload)
+    assert not result.valid
+    assert result.invalid_reason == ERR_EXTENSION_ECHO_MISMATCH
+    assert result.extension_key == "sign-in-with-x"
+
+
 def test_rejects_when_advertised_field_missing() -> None:
     server = x402ResourceServer()
     required = _payment_required({BUILDER_CODE: {"info": {"a": "bc_myapp"}, "schema": 2}})

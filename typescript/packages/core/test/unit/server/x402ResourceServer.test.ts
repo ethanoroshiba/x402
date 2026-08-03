@@ -1895,6 +1895,31 @@ describe("x402ResourceServer", () => {
       expect(server.validateExtensions(paymentRequired, payload)).toEqual({ valid: true });
     });
 
+    it("fails when a non-builder-code extension's array field gains an echoed element", () => {
+      // Additive-array echo matching is scoped to builder-code's `s`; other
+      // extensions' array fields (e.g. sign-in-with-x's `resources`) must still
+      // match exactly so clients cannot smuggle extra values into the echo.
+      const server = new x402ResourceServer();
+      const paymentRequired = buildPaymentRequired({
+        extensions: {
+          "sign-in-with-x": { info: { resources: ["https://api.example.com/data"] } },
+        },
+      });
+      const payload = buildPaymentPayload({
+        extensions: {
+          "sign-in-with-x": {
+            info: { resources: ["https://api.example.com/data", "https://evil.example.com"] },
+          },
+        },
+      });
+
+      expect(server.validateExtensions(paymentRequired, payload)).toEqual({
+        valid: false,
+        invalidReason: "extension_echo_mismatch",
+        extensionKey: "sign-in-with-x",
+      });
+    });
+
     it("passes when only a declared dynamic info field differs", () => {
       const server = new x402ResourceServer();
       server.registerExtension({ key: "siwx", dynamicInfoFields: ["nonce"] });

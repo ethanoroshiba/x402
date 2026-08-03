@@ -696,24 +696,25 @@ func asScalarSingleton(v interface{}) ([]interface{}, bool) {
 	}
 }
 
-// mergeSlicesUnique concatenates client then server, dropping server items that
-// already appear in the result (DeepEqual). Client entries lead so a downstream
-// cap on array length (e.g. builder-code's MAX_SERVICE_CODES) truncates excess
-// server entries rather than the client's.
+// mergeSlicesUnique concatenates client then server, dropping duplicate items
+// (DeepEqual) wherever they occur, including within either input slice. Client
+// entries lead so a downstream cap on array length (e.g. builder-code's
+// MAX_SERVICE_CODES) truncates excess server entries rather than the client's.
 func mergeSlicesUnique(client, server []interface{}) []interface{} {
-	merged := make([]interface{}, len(client), len(client)+len(server))
-	copy(merged, client)
-	for _, item := range server {
-		found := false
+	merged := make([]interface{}, 0, len(client)+len(server))
+	appendUnique := func(item interface{}) {
 		for _, existing := range merged {
 			if DeepEqual(existing, item) {
-				found = true
-				break
+				return
 			}
 		}
-		if !found {
-			merged = append(merged, item)
-		}
+		merged = append(merged, item)
+	}
+	for _, item := range client {
+		appendUnique(item)
+	}
+	for _, item := range server {
+		appendUnique(item)
 	}
 	return merged
 }

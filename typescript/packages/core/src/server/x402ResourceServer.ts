@@ -1303,10 +1303,12 @@ export class x402ResourceServer {
       const echoedInfo = getExtensionInfo(echoedValue);
 
       const dynamicFields = this.registeredExtensions.get(key)?.dynamicInfoFields;
+      const additiveFields = ADDITIVE_ARRAY_INFO_FIELDS[key];
       if (
         !extensionInfoMatchesAdvertised(
           omitFields(advertisedInfo, dynamicFields),
           omitFields(echoedInfo, dynamicFields),
+          additiveFields,
         )
       ) {
         return {
@@ -1684,16 +1686,32 @@ function omitFields(value: unknown, fields?: string[]): unknown {
 }
 
 /**
+ * Extension info fields where the client-echoed array may safely add entries
+ * beyond what the server advertised, keyed by extension key. Scoped narrowly
+ * per field (rather than making all array fields additive) so unrelated
+ * extensions - e.g. sign-in-with-x's `resources` - keep exact array matching.
+ */
+const ADDITIVE_ARRAY_INFO_FIELDS: Record<string, ReadonlySet<string>> = {
+  "builder-code": new Set(["s"]),
+};
+
+/**
  * Returns whether a client-echoed extension payload preserves the server advertisement.
- * Array fields are additive (e.g. builder-code `s`), unlike the exact-match arrays
- * required when matching a client's selected `extra` fields against the server's.
+ * Fields listed in `additiveFields` (e.g. builder-code `s`) allow the echo to add array
+ * entries; every other array field must match exactly via `deepEqual`, same as the
+ * exact-match arrays required when matching a client's selected `extra` fields.
  *
  * @param advertised - Extension info advertised by the server.
  * @param echoed - Extension info echoed back by the client.
+ * @param additiveFields - Field names whose array values may be extended by the echo.
  * @returns True when `echoed` contains every field from `advertised`.
  */
-function extensionInfoMatchesAdvertised(advertised: unknown, echoed: unknown): boolean {
-  return objectContainsSubset(advertised, echoed, true);
+function extensionInfoMatchesAdvertised(
+  advertised: unknown,
+  echoed: unknown,
+  additiveFields?: ReadonlySet<string>,
+): boolean {
+  return objectContainsSubset(advertised, echoed, additiveFields);
 }
 
 /**
@@ -1728,20 +1746,32 @@ function paymentRequirementsMatchAccepted(
  * Recursively checks that `actual` contains every field and value from `expected`.
  * Object values may contain additional fields. Primitives must match exactly.
  *
- * When `additiveArrays` is true (extension info echoes), arrays are additive:
- * every element of `expected` must appear in `actual` (extra elements allowed),
- * and a bare scalar on either side is treated as a single-element array so it
- * compares against an array on the other side. When false (payment-requirements
- * `extra` matching), arrays must match exactly via `deepEqual`, same as any
- * other primitive.
+ * When the current field's name is in `additiveFields` (e.g. builder-code `s`) and
+ * either side is an array, the array is additive: every element of `expected` must
+ * appear in `actual` (extra elements allowed), and a bare scalar on either side is
+ * treated as a single-element array so it compares against an array on the other
+ * side. Every other array field - including payment-requirements `extra` matching,
+ * which never passes `additiveFields` - must match exactly via `deepEqual`, same as
+ * any other primitive.
  *
  * @param expected - Required subset.
  * @param actual - Candidate object.
- * @param additiveArrays - Whether array fields are additive rather than exact-match.
+ * @param additiveFields - Field names whose array values may be extended by `actual`.
+ * @param fieldKey - Name of the field being compared at this recursion level, used to
+ *   test membership in `additiveFields`; undefined at the root call.
  * @returns True when `actual` contains `expected`.
  */
-function objectContainsSubset(expected: unknown, actual: unknown, additiveArrays = false): boolean {
-  if (additiveArrays && (Array.isArray(expected) || Array.isArray(actual))) {
+function objectContainsSubset(
+  expected: unknown,
+  actual: unknown,
+  additiveFields?: ReadonlySet<string>,
+  fieldKey?: string,
+): boolean {
+  if (
+    fieldKey !== undefined &&
+    additiveFields?.has(fieldKey) &&
+    (Array.isArray(expected) || Array.isArray(actual))
+  ) {
     const expectedArray = toComparableArray(expected);
     const actualArray = toComparableArray(actual);
     if (!expectedArray || !actualArray) {
@@ -1764,7 +1794,7 @@ function objectContainsSubset(expected: unknown, actual: unknown, additiveArrays
     if (!hasActualKey) {
       return value === undefined;
     }
-    return objectContainsSubset(value, actualRecord[key], additiveArrays);
+    return objectContainsSubset(value, actualRecord[key], additiveFields, key);
   });
 }
 

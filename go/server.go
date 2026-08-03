@@ -758,9 +758,13 @@ func (s *x402ResourceServer) ValidateExtensions(
 
 	// pair carries an advertised value and its client echo while a worklist walks
 	// nested objects: the echo must contain every advertised field (objects may
-	// add fields; arrays are additive — every advertised element must appear in
-	// the echo; primitives must match exactly via DeepEqual).
-	type pair struct{ advertised, echoed interface{} }
+	// add fields; primitives must match exactly via DeepEqual). additive marks
+	// pairs whose array values may be extended by the echo (see
+	// additiveArrayInfoFields); all other array fields must match exactly.
+	type pair struct {
+		advertised, echoed interface{}
+		additive           bool
+	}
 
 	// normalize converts a server-declared value (which may be a typed struct)
 	// into the generic JSON shape the echoed payload already uses.
@@ -804,26 +808,29 @@ func (s *x402ResourceServer) ValidateExtensions(
 			echoed = omitFields(echoed, dynamicFields)
 		}
 
+		additiveFields := additiveArrayInfoFields[key]
 		mismatch := false
-		pending := []pair{{advertised, echoed}}
+		pending := []pair{{advertised, echoed, false}}
 		for i := 0; i < len(pending) && !mismatch; i++ {
-			advSlice, advIsSlice := asSlice(pending[i].advertised)
-			echoSlice, echoIsSlice := asSlice(pending[i].echoed)
-			// A scalar on either side (e.g. builder-code `s` sent as a bare string)
-			// is treated as a single-element array so it compares against an array
-			// on the other side. Two scalars fall through to the plain DeepEqual
-			// comparison below unchanged.
-			if advIsSlice || echoIsSlice {
-				if !advIsSlice {
-					advSlice, advIsSlice = asScalarSingleton(pending[i].advertised)
+			if pending[i].additive {
+				advSlice, advIsSlice := asSlice(pending[i].advertised)
+				echoSlice, echoIsSlice := asSlice(pending[i].echoed)
+				// A scalar on either side (e.g. builder-code `s` sent as a bare string)
+				// is treated as a single-element array so it compares against an array
+				// on the other side. Two scalars fall through to the plain DeepEqual
+				// comparison below unchanged.
+				if advIsSlice || echoIsSlice {
+					if !advIsSlice {
+						advSlice, advIsSlice = asScalarSingleton(pending[i].advertised)
+					}
+					if !echoIsSlice {
+						echoSlice, echoIsSlice = asScalarSingleton(pending[i].echoed)
+					}
+					if !advIsSlice || !echoIsSlice || !arrayContainsSubset(advSlice, echoSlice) {
+						mismatch = true
+					}
+					continue
 				}
-				if !echoIsSlice {
-					echoSlice, echoIsSlice = asScalarSingleton(pending[i].echoed)
-				}
-				if !advIsSlice || !echoIsSlice || !arrayContainsSubset(advSlice, echoSlice) {
-					mismatch = true
-				}
-				continue
 			}
 			advertisedMap, isObject := pending[i].advertised.(map[string]interface{})
 			if !isObject {
@@ -842,7 +849,7 @@ func (s *x402ResourceServer) ValidateExtensions(
 					break
 				}
 				if exists {
-					pending = append(pending, pair{advValue, echoValue})
+					pending = append(pending, pair{advValue, echoValue, additiveFields[field]})
 				}
 			}
 		}
@@ -857,6 +864,14 @@ func (s *x402ResourceServer) ValidateExtensions(
 	}
 
 	return ExtensionValidationResult{Valid: true}
+}
+
+// additiveArrayInfoFields lists extension info fields, keyed by extension key,
+// where the client-echoed array may safely add entries beyond what the server
+// advertised. Scoped narrowly per extension + field so unrelated extensions
+// (e.g. sign-in-with-x's "resources") keep exact array matching.
+var additiveArrayInfoFields = map[string]map[string]bool{
+	"builder-code": {"s": true},
 }
 
 // dynamicInfoFields returns the dynamic `info` field names declared by the

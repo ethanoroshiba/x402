@@ -804,16 +804,16 @@ export class x402Client {
 
 /**
  * Concatenates two arrays, keeping client entries first (so a downstream length
- * cap trims server entries rather than the client's) and dropping server
- * duplicates already present (deep equality).
+ * cap trims server entries rather than the client's) and dropping duplicates
+ * (deep equality) wherever they occur, including within either input array.
  *
  * @param client - Client-provided array values
  * @param server - Server-declared array values
  * @returns Deduplicated concatenation
  */
 function mergeArraysUnique(client: unknown[], server: unknown[]): unknown[] {
-  const merged = [...client];
-  for (const item of server) {
+  const merged: unknown[] = [];
+  for (const item of [...client, ...server]) {
     if (!merged.some(existing => deepEqual(existing, item))) {
       merged.push(item);
     }

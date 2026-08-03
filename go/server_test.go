@@ -1152,4 +1152,26 @@ func TestValidateExtensions(t *testing.T) {
 			t.Fatalf("expected valid echo for scalar echo of single-element advertised s, got %+v", r)
 		}
 	})
+
+	t.Run("fails when a non-builder-code extension's array field gains an echoed element", func(t *testing.T) {
+		// Additive-array echo matching is scoped to builder-code's `s`; other
+		// extensions' array fields (e.g. sign-in-with-x's `resources`) must still
+		// match exactly so clients cannot smuggle extra values into the echo.
+		advertised := map[string]interface{}{
+			"sign-in-with-x": map[string]interface{}{
+				"info": map[string]interface{}{"resources": []interface{}{"https://api.example.com/data"}},
+			},
+		}
+		p := payloadWith(map[string]interface{}{
+			"sign-in-with-x": map[string]interface{}{
+				"info": map[string]interface{}{
+					"resources": []interface{}{"https://api.example.com/data", "https://evil.example.com"},
+				},
+			},
+		})
+		r := server.ValidateExtensions(advertised, p)
+		if r.Valid || r.InvalidReason != "extension_echo_mismatch" || r.ExtensionKey != "sign-in-with-x" {
+			t.Fatalf("expected echo mismatch on sign-in-with-x, got %+v", r)
+		}
+	})
 }

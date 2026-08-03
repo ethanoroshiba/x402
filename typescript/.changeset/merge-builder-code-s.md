@@ -2,4 +2,4 @@
 "@x402/core": patch
 ---
 
-Merge server and client builder-code `s` arrays during extension re-merge instead of dropping the client's, and treat echoed extension-info arrays as additive (client-first, deduped, with scalar/array coercion) in extension echo validation. Payment-requirements `extra` matching is unaffected and continues to require exact array equality.
+Merge server and client builder-code `s` arrays during extension re-merge instead of dropping the client's (fully deduped, including duplicates within either side), and treat echoed builder-code `s` specifically as additive (client-first, with scalar/array coercion) in extension echo validation. Other extensions' array fields, and payment-requirements `extra` matching, are unaffected and continue to require exact array equality.

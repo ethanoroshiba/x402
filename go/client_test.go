@@ -744,4 +744,24 @@ func TestMergeExtensions(t *testing.T) {
 			t.Fatalf("expected [bc_client bc_server], got %v", info["s"])
 		}
 	})
+
+	t.Run("dedupes repeated entries within a single side of a merged array field", func(t *testing.T) {
+		server := map[string]interface{}{
+			"builder-code": map[string]interface{}{
+				"info": map[string]interface{}{"s": []interface{}{"bc_server", "bc_server"}},
+			},
+		}
+		client := map[string]interface{}{
+			"builder-code": map[string]interface{}{
+				"info": map[string]interface{}{"s": []interface{}{"bc_client", "bc_client"}},
+			},
+		}
+
+		merged := mergeExtensions(server, client)
+		info := merged["builder-code"].(map[string]interface{})["info"].(map[string]interface{})
+		got, ok := asSlice(info["s"])
+		if !ok || !DeepEqual(got, []interface{}{"bc_client", "bc_server"}) {
+			t.Fatalf("expected [bc_client bc_server], got %v", info["s"])
+		}
+	})
 }

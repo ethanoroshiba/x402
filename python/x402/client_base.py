@@ -89,13 +89,14 @@ def _merge_extensions(
 
 
 def _merge_lists_unique(client: list[Any], server: list[Any]) -> list[Any]:
-    """Concatenate ``client`` then ``server``, dropping server duplicates.
+    """Concatenate ``client`` then ``server``, dropping duplicates wherever they
+    occur, including within either input list.
 
     Client entries lead so a downstream length cap (e.g. builder-code's
     MAX_SERVICE_CODES) trims excess server entries rather than the client's.
     """
-    merged = list(client)
-    for item in server:
+    merged: list[Any] = []
+    for item in [*client, *server]:
         if item not in merged:
             merged.append(item)
     return merged
