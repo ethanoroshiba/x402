@@ -19,6 +19,7 @@ import {
   parseEip3009TransferError,
   simulateEip3009TransferResult,
 } from "./eip3009-utils";
+import { waitAndReturnSettleResponse } from "../../shared/permit2";
 
 export interface VerifyEIP3009Options {
   /** Run onchain simulation. Defaults to true. */
@@ -375,39 +376,13 @@ export async function settleEIP3009(
       dataSuffix,
     );
 
-    // Wait for transaction confirmation. A failure here (RPC error, timeout) is non-terminal:
-    // the transaction was already broadcast and may still land on chain, so this must not be
-    // conflated with the generic catch below, which would discard the transaction hash.
-    let receipt;
-    try {
-      receipt = await signer.waitForTransactionReceipt({ hash: tx });
-    } catch (error) {
-      return {
-        success: false,
-        errorReason: Errors.ErrSettlementPending,
-        errorMessage: error instanceof Error ? error.message : String(error),
-        transaction: tx,
-        network: payload.accepted.network,
-        payer,
-      };
-    }
-
-    if (receipt.status !== "success") {
-      return {
-        success: false,
-        errorReason: Errors.ErrTransactionFailed,
-        transaction: tx,
-        network: payload.accepted.network,
-        payer,
-      };
-    }
-
-    return {
-      success: true,
-      transaction: tx,
-      network: payload.accepted.network,
+    return waitAndReturnSettleResponse(
+      signer,
+      tx,
+      payload,
       payer,
-    };
+      Errors.ErrTransactionFailed,
+    );
   } catch (error) {
     // Preserve the raw revert text alongside the mapped code. The mapper collapses many
     // distinct on-chain reverts into a single reason (e.g. ErrInvalidSignature), so without
