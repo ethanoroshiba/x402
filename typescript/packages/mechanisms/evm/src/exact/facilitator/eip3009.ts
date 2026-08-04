@@ -376,13 +376,7 @@ export async function settleEIP3009(
       dataSuffix,
     );
 
-    return waitAndReturnSettleResponse(
-      signer,
-      tx,
-      payload,
-      payer,
-      Errors.ErrTransactionFailed,
-    );
+    return waitAndReturnSettleResponse(signer, tx, payload, payer, Errors.ErrTransactionFailed);
   } catch (error) {
     // Preserve the raw revert text alongside the mapped code. The mapper collapses many
     // distinct on-chain reverts into a single reason (e.g. ErrInvalidSignature), so without
