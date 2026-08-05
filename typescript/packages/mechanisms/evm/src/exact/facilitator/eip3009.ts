@@ -379,7 +379,7 @@ export async function settleEIP3009(
     return waitAndReturnSettleResponse(
       signer,
       tx,
-      payload,
+      payload.accepted.network,
       payer,
       Errors.ErrTransactionFailed,
       receipt => {

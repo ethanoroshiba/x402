@@ -19,6 +19,23 @@ class ReceiptWaiter(Protocol):
         ...
 
 
+def invalid_broadcast_hash_response(
+    tx: str,
+    error_reason: str,
+    network: str,
+    payer: str | None = None,
+) -> SettleResponse:
+    """Terminal failure when a signer reports success without a usable hash."""
+    return SettleResponse(
+        success=False,
+        error_reason=error_reason,
+        error_message=f"signer returned an invalid transaction hash: {tx!r}",
+        transaction="",
+        network=network,
+        payer=payer,
+    )
+
+
 def wait_for_receipt_and_build_response(
     signer: ReceiptWaiter,
     tx_hash: str,
@@ -28,23 +45,17 @@ def wait_for_receipt_and_build_response(
     failed_reason: str,
     amount: str | None = None,
     validate_receipt: Callable[[TransactionReceipt], SettleResponse | None] | None = None,
+    on_success: Callable[[TransactionReceipt], SettleResponse] | None = None,
 ) -> SettleResponse:
     """Wait for receipt; on wait failure return settlement_pending with the broadcast hash.
 
     validate_receipt runs after a successful receipt (e.g. Transfer event check). Return a
     SettleResponse to fail settlement; return None to accept success.
+
+    on_success, when set, builds the success response from the receipt (e.g. event parsing).
     """
-    # settlement_pending is only meaningful with the broadcast hash to reconcile against, so a
-    # signer that reports success without a usable hash is a terminal failure.
     if not is_valid_tx_hash(tx_hash):
-        return SettleResponse(
-            success=False,
-            error_reason=failed_reason,
-            error_message=f"signer returned an invalid transaction hash: {tx_hash!r}",
-            transaction="",
-            network=network,
-            payer=payer,
-        )
+        return invalid_broadcast_hash_response(tx_hash, failed_reason, network, payer)
 
     try:
         receipt = signer.wait_for_transaction_receipt(tx_hash)
@@ -71,6 +82,9 @@ def wait_for_receipt_and_build_response(
         validation_failure = validate_receipt(receipt)
         if validation_failure is not None:
             return validation_failure
+
+    if on_success is not None:
+        return on_success(receipt)
 
     return SettleResponse(
         success=True,

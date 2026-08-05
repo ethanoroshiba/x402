@@ -441,8 +441,6 @@ class ExactEvmScheme:
                 data_suffix=data_suffix,
             )
 
-            # Helper handles receipt wait: failure must not fall into outer catch (discards
-            # tx_hash). After success, require expected ERC-20 Transfer when logs present.
             def _validate_transfer(receipt):
                 if receipt.logs is not None and not verify_eip3009_transfer_event(
                     receipt.logs,
