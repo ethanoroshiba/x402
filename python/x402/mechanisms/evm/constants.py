@@ -343,6 +343,7 @@ ERR_TOKEN_NAME_MISMATCH = "invalid_exact_evm_token_name_mismatch"
 ERR_TOKEN_VERSION_MISMATCH = "invalid_exact_evm_token_version_mismatch"
 ERR_EIP3009_NOT_SUPPORTED = "invalid_exact_evm_eip3009_not_supported"
 ERR_TRANSACTION_SIMULATION_FAILED = "invalid_exact_evm_transaction_simulation_failed"
+ERR_TRANSFER_EVENT_MISMATCH = "invalid_exact_evm_transfer_event_mismatch"
 
 # Permit2-specific error codes
 ERR_PERMIT2_INVALID_SPENDER = "invalid_permit2_spender"
@@ -607,6 +608,16 @@ NETWORK_CONFIGS: dict[str, NetworkConfig] = {
             "version": "1",
             "decimals": 6,
             "asset_transfer_method": "permit2",
+        },
+    },
+    # Flare Mainnet
+    "eip155:14": {
+        "chain_id": 14,
+        "default_asset": {
+            "address": "0xe7cd86e13AC4309349F30B3435a9d337750fC82D",
+            "name": "USD₮0",
+            "version": "1",
+            "decimals": 6,
         },
     },
     # Celo Mainnet

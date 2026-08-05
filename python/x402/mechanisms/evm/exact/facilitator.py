@@ -25,6 +25,7 @@ from ..constants import (
     ERR_SMART_WALLET_DEPLOYMENT_FAILED,
     ERR_TRANSACTION_FAILED,
     ERR_TRANSACTION_SIMULATION_FAILED,
+    ERR_TRANSFER_EVENT_MISMATCH,
     ERR_UNDEPLOYED_SMART_WALLET,
     ERR_UNSUPPORTED_SCHEME,
     ERR_VALID_AFTER_FUTURE,
@@ -41,6 +42,7 @@ from ..exact.eip3009_utils import (
     parse_eip3009_authorization,
     parse_eip3009_transfer_error,
     simulate_eip3009_transfer_result,
+    verify_eip3009_transfer_event,
 )
 from ..exact.permit2_utils import settle_permit2, verify_permit2
 from ..settle_receipt import wait_for_receipt_and_build_response
@@ -439,14 +441,32 @@ class ExactEvmScheme:
                 data_suffix=data_suffix,
             )
 
-            # The helper handles the receipt wait itself: a failure there must not fall into the
-            # outer catch, which discards tx_hash.
+            # Helper handles receipt wait: failure must not fall into outer catch (discards
+            # tx_hash). After success, require expected ERC-20 Transfer when logs present.
+            def _validate_transfer(receipt):
+                if receipt.logs is not None and not verify_eip3009_transfer_event(
+                    receipt.logs,
+                    token_address,
+                    from_address=parsed_authorization.from_address,
+                    to=parsed_authorization.to,
+                    value=parsed_authorization.value,
+                ):
+                    return SettleResponse(
+                        success=False,
+                        error_reason=ERR_TRANSFER_EVENT_MISMATCH,
+                        transaction=tx_hash,
+                        network=network,
+                        payer=payer,
+                    )
+                return None
+
             return wait_for_receipt_and_build_response(
                 self._signer,
                 tx_hash,
                 network,
                 payer,
                 failed_reason=ERR_TRANSACTION_FAILED,
+                validate_receipt=_validate_transfer,
             )
 
         except Exception as e:

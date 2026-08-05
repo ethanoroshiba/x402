@@ -194,6 +194,8 @@ export async function verifyPermit2Allowance(
   }
 }
 
+type SettleReceipt = Awaited<ReturnType<FacilitatorEvmSigner["waitForTransactionReceipt"]>>;
+
 /**
  * Waits for a transaction receipt and returns the appropriate SettleResponse.
  *
@@ -205,6 +207,8 @@ export async function verifyPermit2Allowance(
  *   a reverted receipt, or a receipt-wait failure that isn't a likely transport error (see
  *   {@link isLikelyTransportError}). Transport-like receipt-wait failures report
  *   `ErrSettlementPending` instead, regardless of this value.
+ * @param validateReceipt - Optional check after a successful receipt (e.g. Transfer event).
+ *   Return a SettleResponse to fail settlement; return undefined to accept success.
  * @returns Promise resolving to a settlement response indicating success or failure
  */
 export async function waitAndReturnSettleResponse(
@@ -213,6 +217,7 @@ export async function waitAndReturnSettleResponse(
   payload: PaymentPayload,
   payer: `0x${string}`,
   failedStatusReason: string = ErrInvalidTransactionState,
+  validateReceipt?: (receipt: SettleReceipt) => SettleResponse | undefined,
 ): Promise<SettleResponse> {
   // settlement_pending is only meaningful with the broadcast hash to reconcile against, so a
   // signer that reports success without a usable hash is a terminal failure.
@@ -253,6 +258,11 @@ export async function waitAndReturnSettleResponse(
       network: payload.accepted.network,
       payer,
     };
+  }
+
+  const validationFailure = validateReceipt?.(receipt);
+  if (validationFailure) {
+    return validationFailure;
   }
 
   return {

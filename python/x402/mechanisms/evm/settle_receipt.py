@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Protocol
 
 from ...schemas import SettleResponse
@@ -53,8 +54,13 @@ def wait_for_receipt_and_build_response(
     *,
     failed_reason: str,
     amount: str | None = None,
+    validate_receipt: Callable[[TransactionReceipt], SettleResponse | None] | None = None,
 ) -> SettleResponse:
-    """Wait for receipt; on wait failure return settlement_pending with the broadcast hash."""
+    """Wait for receipt; on wait failure return settlement_pending with the broadcast hash.
+
+    validate_receipt runs after a successful receipt (e.g. Transfer event check). Return a
+    SettleResponse to fail settlement; return None to accept success.
+    """
     # settlement_pending is only meaningful with the broadcast hash to reconcile against, so a
     # signer that reports success without a usable hash is a terminal failure.
     if not is_valid_tx_hash(tx_hash):
@@ -98,6 +104,11 @@ def wait_for_receipt_and_build_response(
             network=network,
             payer=payer,
         )
+
+    if validate_receipt is not None:
+        validation_failure = validate_receipt(receipt)
+        if validation_failure is not None:
+            return validation_failure
 
     return SettleResponse(
         success=True,
